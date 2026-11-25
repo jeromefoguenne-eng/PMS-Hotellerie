@@ -164,7 +164,7 @@ export const MemberStatsView: React.FC<MemberStatsViewProps> = ({
         <SimpleBarChart
           title={lang === 'fr' ? 'Nombre de réservations' : 'Bookings Count'}
           subtitle="Arrivées enregistrées par période"
-          color="#4F46E5"
+          color="#131A7A"
           data={analytics.series.map((p) => ({
             label: p.label,
             value: p.reservationsCount,

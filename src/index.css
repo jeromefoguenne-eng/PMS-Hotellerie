@@ -1,5 +1,27 @@
 @import "tailwindcss";
 
+@theme {
+  /* Palette officielle extraite de Logo OpenHotelPMS.png (Bleu Royal Nuit + Turquoise Mint) */
+  --color-indigo-50: #EEF0FF;
+  --color-indigo-100: #DFE3FF;
+  --color-indigo-200: #C2C8FF;
+  --color-indigo-300: #99A3FF;
+  --color-indigo-400: #2DD4BF;
+  --color-indigo-500: #1E2896;
+  --color-indigo-600: #131A7A;
+  --color-indigo-700: #0E135C;
+  --color-indigo-800: #0A0E45;
+  --color-indigo-900: #070A33;
+
+  --color-emerald-400: #5EEAD4;
+  --color-emerald-500: #2DD4BF;
+  --color-emerald-600: #14B8A6;
+  --color-emerald-700: #0F766E;
+
+  --color-slate-900: #0D124F;
+  --color-slate-950: #070A33;
+}
+
 @layer base {
   body {
     font-family: 'Inter', system-ui, -apple-system, sans-serif;

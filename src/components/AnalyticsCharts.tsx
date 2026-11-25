@@ -230,8 +230,8 @@ export const OccupancyLineChart: React.FC<OccupancyLineChartProps> = ({
               );
             })}
 
-            {areaPath && <path d={areaPath} fill="#10B981" opacity={0.14} />}
-            {linePath && <path d={linePath} fill="none" stroke="#10B981" strokeWidth={2.5} strokeLinejoin="round" />}
+            {areaPath && <path d={areaPath} fill="#14B8A6" opacity={0.14} />}
+            {linePath && <path d={linePath} fill="none" stroke="#14B8A6" strokeWidth={2.5} strokeLinejoin="round" />}
 
             {points.map((p, idx) => (
               <g
@@ -244,7 +244,7 @@ export const OccupancyLineChart: React.FC<OccupancyLineChartProps> = ({
                   cx={p.x}
                   cy={p.y}
                   r={hoveredIdx === idx ? 5.5 : 3.5}
-                  fill="#10B981"
+                  fill="#14B8A6"
                   stroke="#FFFFFF"
                   strokeWidth={1.5}
                 />
