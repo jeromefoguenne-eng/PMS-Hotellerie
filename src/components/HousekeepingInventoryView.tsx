@@ -30,6 +30,7 @@ export const HousekeepingInventoryView: React.FC<HousekeepingInventoryViewProps>
 
   const inHouse = project.reservations.filter((r) => r.status === 'checked_in');
   const [selectedResId, setSelectedResId] = useState(inHouse[0]?.id || '');
+  const [restockQtyByItem, setRestockQtyByItem] = useState<Record<string, number>>({});
 
   if (mode === 'housekeeping') {
     return (
@@ -213,7 +214,7 @@ export const HousekeepingInventoryView: React.FC<HousekeepingInventoryViewProps>
                     {item.stockQty} {isLow && '(Alerte !)'}
                   </td>
                   <td className="p-3.5 text-right tabular-nums text-slate-600">{item.soldCount}</td>
-                  <td className="p-3.5 text-right space-x-2">
+                  <td className="p-3.5 text-right space-x-1.5 whitespace-nowrap">
                     {isSellable && selectedResId && (
                       <button
                         onClick={() => onSellCatalogItemToRoom(item.id, selectedResId, 1)}
@@ -222,11 +223,27 @@ export const HousekeepingInventoryView: React.FC<HousekeepingInventoryViewProps>
                         <ShoppingCart className="w-3 h-3" /> Imputer Folio
                       </button>
                     )}
+                    <input
+                      type="number"
+                      min={1}
+                      value={restockQtyByItem[item.id] ?? 10}
+                      onChange={(e) =>
+                        setRestockQtyByItem({
+                          ...restockQtyByItem,
+                          [item.id]: Math.max(1, Number(e.target.value)),
+                        })
+                      }
+                      className="w-16 px-2 py-1 border border-slate-300 rounded text-center font-semibold bg-white"
+                      aria-label={`Quantité à ajouter pour ${item.name}`}
+                    />
                     <button
-                      onClick={() => onRestockItem(item.id, 20)}
+                      onClick={() => {
+                        const qty = restockQtyByItem[item.id] ?? 10;
+                        if (qty > 0) onRestockItem(item.id, qty);
+                      }}
                       className="px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-100 font-semibold text-slate-700"
                     >
-                      +20 Stock
+                      + Ajouter
                     </button>
                   </td>
                 </tr>
