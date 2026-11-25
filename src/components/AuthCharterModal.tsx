@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Building2, UserPlus, LogIn, CheckCircle2, Sparkles } from 'lucide-react';
+import { ShieldCheck, UserPlus, LogIn, CheckCircle2, Sparkles } from 'lucide-react';
 import type { Language, MemberAccount } from '../types/pms';
+import { OpenHotelPmsLogo } from './OpenHotelPmsLogo';
 
 interface AuthCharterModalProps {
   lang: Language;
@@ -67,14 +68,8 @@ export const AuthCharterModal: React.FC<AuthCharterModalProps> = ({
         {/* Left Brand Panel */}
         <div className="md:col-span-2 bg-slate-900 text-white p-8 flex flex-col justify-between">
           <div>
-            <div className="flex items-center gap-2.5 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center shadow-lg">
-                <Building2 className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold tracking-tight">OpenPMS</h1>
-                <p className="text-xs text-slate-400">Open Source Hospitality & Simulator</p>
-              </div>
+            <div className="mb-6">
+              <OpenHotelPmsLogo size="lg" />
             </div>
 
             <h2 className="text-2xl font-bold leading-snug mb-4">

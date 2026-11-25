@@ -3,6 +3,7 @@ import { ShieldAlert, Users, Activity, Download, Database, CheckCircle2, Ban } f
 import type { Language, MemberAccount, TelemetryEvent } from '../types/pms';
 import { downloadCSV, downloadJSON } from '../lib/format';
 import { loadCloudConfig, saveCloudConfig } from '../lib/storage';
+import { SUPABASE_SQL_SCHEMA } from '../lib/supabaseSync';
 import { computeAdminAnalytics, type TimeGranularity } from '../lib/analytics';
 import { OccupancyLineChart, SimpleBarChart } from './AnalyticsCharts';
 
@@ -305,8 +306,9 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
             Connecteur Base de Données Cloud (Optionnel — Supabase Free Tier)
           </h3>
           <p className="text-slate-600 leading-relaxed">
-            Sur GitHub Pages, les données sont sauvegardées localement par navigateur. Pour centraliser en temps réel les inscriptions et statistiques de vrais hôteliers dans le monde, renseignez un projet gratuit <strong>Supabase</strong> :
+            Sur GitHub Pages, les données sont sauvegardées localement par navigateur. Pour synchroniser en temps réel vos hôtels entre PC, smartphones, tablettes et employés, renseignez un projet gratuit <strong>Supabase</strong> :
           </p>
+          <pre className="p-2.5 rounded-lg bg-slate-900 text-emerald-300 text-[10px] overflow-x-auto">{SUPABASE_SQL_SCHEMA}</pre>
           <input
             placeholder="Supabase Project URL (ex: https://xxx.supabase.co)"
             value={cloudCfg.supabaseUrl}

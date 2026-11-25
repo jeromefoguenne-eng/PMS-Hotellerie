@@ -2,12 +2,11 @@ import type { CurrencyCode } from '../types/pms';
 
 export function formatMoney(amount: number, currency: CurrencyCode): string {
   const rounded = Math.round(amount);
-  if (currency === 'FCFA') {
-    return `${rounded.toLocaleString('fr-FR')} FCFA`;
-  }
-  if (currency === 'EUR') {
-    return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
-  }
+  if (currency === 'FCFA') return `${rounded.toLocaleString('fr-FR')} FCFA`;
+  if (currency === 'MAD') return `${rounded.toLocaleString('fr-FR')} MAD`;
+  if (currency === 'EUR') return `${amount.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+  if (currency === 'GBP') return `£${amount.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  if (currency === 'CHF') return `${amount.toLocaleString('fr-CH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CHF`;
   return `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 

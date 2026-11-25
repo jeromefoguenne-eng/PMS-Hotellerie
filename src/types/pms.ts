@@ -1,6 +1,6 @@
 export type Language = 'fr' | 'en';
 export type UserRole = 'member' | 'teacher' | 'admin';
-export type CurrencyCode = 'FCFA' | 'EUR' | 'USD';
+export type CurrencyCode = 'FCFA' | 'EUR' | 'USD' | 'GBP' | 'CHF' | 'MAD';
 export type RoomStatus = 'available' | 'occupied' | 'dirty' | 'cleaning' | 'inspected' | 'out_of_order';
 export type RoomType = 'Standard' | 'Supérieure' | 'Deluxe' | 'Suite' | 'Familiale';
 export type ReservationStatus = 'confirmed' | 'waitlist' | 'checked_in' | 'checked_out' | 'cancelled' | 'no_show';
@@ -26,6 +26,8 @@ export interface HotelModulesConfig {
   barAndFood: boolean;
   minibar: boolean;
   housekeepingMode: 'included' | 'optional_guest_choice' | 'disabled';
+  breakfastIncluded: boolean;
+  onlineCheckIn: boolean;
   spa: boolean;
   parking: boolean;
   inventory: boolean;
@@ -36,6 +38,7 @@ export interface BillingConfig {
   vatRate: number;
   cityTaxPerNight: number;
   serviceChargeRate: number;
+  cancellationPolicy: 'flexible' | '24h' | 'non_refundable';
   allowSplitBilling: boolean;
   allowGroupBilling: boolean;
   allowDiscountsAndCredits: boolean;
@@ -190,6 +193,23 @@ export interface PedagogicalProgress {
   activeScenarioId?: string;
 }
 
+export interface ProjectCollaborator {
+  email: string;
+  name: string;
+  role: 'manager' | 'reception' | 'housekeeping' | 'accounting';
+  addedAt: string;
+}
+
+export interface ProjectActionLog {
+  id: string;
+  timestamp: string;
+  actorName: string;
+  actorEmail: string;
+  category: 'reservation' | 'front_desk' | 'billing' | 'housekeeping' | 'inventory' | 'config' | 'team';
+  action: string;
+  details: string;
+}
+
 export interface HotelProject {
   id: string;
   name: string;
@@ -208,6 +228,8 @@ export interface HotelProject {
   lostAndFound: LostAndFoundItem[];
   nightAudits: NightAuditLog[];
   pedagogy: PedagogicalProgress;
+  collaborators?: ProjectCollaborator[];
+  actionLog?: ProjectActionLog[];
 }
 
 export interface TelemetryEvent {

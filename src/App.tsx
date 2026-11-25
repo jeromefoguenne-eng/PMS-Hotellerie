@@ -7,6 +7,7 @@ import {
   Sparkles,
   Package,
   BarChart3,
+  BarChart2,
   Sliders,
   GraduationCap,
   FolderKanban,
@@ -14,12 +15,16 @@ import {
   Search,
   Clock,
   LogOut,
-  Building2,
   Globe,
   Moon,
+  History,
+  Menu,
+  X,
+  Plus,
+  CheckCircle2,
+  Cloud,
 } from 'lucide-react';
 import type {
-  CurrencyCode,
   FolioCategory,
   Guest,
   HotelConfig,
@@ -28,6 +33,8 @@ import type {
   MemberAccount,
   PaymentMethod,
   PedagogicalMode,
+  ProjectActionLog,
+  ProjectCollaborator,
   Reservation,
   RoomStatus,
   TelemetryEvent,
@@ -35,15 +42,19 @@ import type {
 import { translations } from './i18n/translations';
 import {
   appendTelemetry,
+  loadCloudConfig,
   loadCurrentMemberId,
   loadMembers,
   loadTelemetry,
   saveCurrentMemberId,
   saveMembers,
+  saveTelemetry,
 } from './lib/storage';
+import { pullStateFromSupabase, pushStateToSupabase } from './lib/supabaseSync';
 import { buildRooms, createCotonouProject } from './data/seedData';
 import { addDays, diffNights } from './lib/format';
 import { PEDAGOGICAL_SCENARIOS } from './data/pedagogyData';
+import { OpenHotelPmsLogo } from './components/OpenHotelPmsLogo';
 import { AuthCharterModal } from './components/AuthCharterModal';
 import { DashboardView } from './components/DashboardView';
 import { TimelinePlanningView } from './components/TimelinePlanningView';
@@ -54,6 +65,7 @@ import { ConfiguratorProjectsView } from './components/ConfiguratorProjectsView'
 import { PedagogyReportsView } from './components/PedagogyReportsView';
 import { AdminSpaceView } from './components/AdminSpaceView';
 import { MemberStatsView } from './components/MemberStatsView';
+import { AuditLogTeamView } from './components/AuditLogTeamView';
 
 export function App() {
   const [lang, setLang] = useState<Language>('fr');
@@ -63,22 +75,73 @@ export function App() {
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [lastSavedTime, setLastSavedTime] = useState<string>(() =>
+    new Date().toTimeString().slice(0, 8)
+  );
+  const [cloudSynced, setCloudSynced] = useState(false);
 
   const t = translations[lang];
 
+  // Auto-pull from Supabase on mount if configured
+  useEffect(() => {
+    const cfg = loadCloudConfig();
+    if (cfg.enabled) {
+      pullStateFromSupabase(cfg).then((remote) => {
+        if (remote) {
+          setMembers(remote.members);
+          setTelemetry(remote.telemetry);
+          saveMembers(remote.members);
+          saveTelemetry(remote.telemetry);
+          setCloudSynced(true);
+        }
+      });
+    }
+  }, []);
+
+  // Auto-save at instant T + optional Cloud push
   useEffect(() => {
     saveMembers(members);
-  }, [members]);
+    setLastSavedTime(new Date().toTimeString().slice(0, 8));
+    const cfg = loadCloudConfig();
+    if (cfg.enabled) {
+      pushStateToSupabase(cfg, members, telemetry).then((ok) => setCloudSynced(ok));
+    }
+  }, [members, telemetry]);
 
   useEffect(() => {
     saveCurrentMemberId(currentMemberId);
   }, [currentMemberId]);
 
-  const currentMember = members.find((m) => m.id === currentMemberId) || null;
+  // Support multi-employee login: either primary member email OR collaborator email on a project
+  const currentMember =
+    members.find((m) => m.id === currentMemberId) ||
+    members.find((m) => m.projects.some((p) => p.collaborators?.some((c) => c.email === currentMemberId))) ||
+    null;
+
   const activeProject =
     currentMember?.projects.find((p) => p.id === currentMember.activeProjectId) ||
     currentMember?.projects[0] ||
     null;
+
+  const logAction = (
+    proj: HotelProject,
+    category: ProjectActionLog['category'],
+    action: string,
+    details: string
+  ): ProjectActionLog[] => {
+    if (!currentMember) return proj.actionLog || [];
+    const entry: ProjectActionLog = {
+      id: `act-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+      timestamp: new Date().toISOString(),
+      actorName: currentMember.name,
+      actorEmail: currentMember.email,
+      category,
+      action,
+      details,
+    };
+    return [entry, ...(proj.actionLog || [])].slice(0, 300);
+  };
 
   const updateActiveProject = (updater: (proj: HotelProject) => HotelProject) => {
     if (!currentMember || !activeProject) return;
@@ -159,7 +222,7 @@ export function App() {
       roomsDelta: 0,
       itemsDelta: 0,
       currency: newProj.config.currency,
-      detail: `Inscription membre + acceptation Charte OpenPMS`,
+      detail: `Inscription membre + acceptation Charte Open Hotel PMS`,
     });
     setTelemetry(updated);
   };
@@ -175,14 +238,14 @@ export function App() {
     );
   }
 
-  // Handlers for PMS Operations
+  // PMS Operations with automatic Audit Log
   const handleCreateGuest = (guestData: Omit<Guest, 'id' | 'loyaltyPoints'>): Guest => {
-    const newGuest: Guest = {
-      ...guestData,
-      id: `g-${Date.now()}`,
-      loyaltyPoints: 0,
-    };
-    updateActiveProject((p) => ({ ...p, guests: [newGuest, ...p.guests] }));
+    const newGuest: Guest = { ...guestData, id: `g-${Date.now()}`, loyaltyPoints: 0 };
+    updateActiveProject((p) => ({
+      ...p,
+      guests: [newGuest, ...p.guests],
+      actionLog: logAction(p, 'reservation', 'Création fiche client', `${newGuest.firstName} ${newGuest.lastName}`),
+    }));
     return newGuest;
   };
 
@@ -193,6 +256,7 @@ export function App() {
     const nights = diffNights(resData.checkIn, resData.checkOut);
     const roomCharge = resData.nightlyRate * nights;
     const taxCharge = activeProject.config.billing.cityTaxPerNight * nights;
+    const guest = activeProject.guests.find((g) => g.id === resData.guestId);
 
     const newFolio = {
       id: `fol-${Date.now()}`,
@@ -230,6 +294,12 @@ export function App() {
       ...p,
       reservations: [newRes, ...p.reservations],
       folios: [newFolio, ...p.folios],
+      actionLog: logAction(
+        p,
+        'reservation',
+        `Création réservation ${ref}`,
+        `${guest?.firstName || ''} ${guest?.lastName || ''} • ${resData.roomType} • ${resData.checkIn} → ${resData.checkOut}`
+      ),
     }));
     trackEvent('reservation_created', `Nouvelle réservation ${ref} (${nights} nuits)`, {
       revenue: roomCharge,
@@ -238,32 +308,44 @@ export function App() {
   };
 
   const handleUpdateReservation = (resId: string, patch: Partial<Reservation>) => {
+    const res = activeProject.reservations.find((r) => r.id === resId);
     updateActiveProject((p) => ({
       ...p,
       reservations: p.reservations.map((r) => (r.id === resId ? { ...r, ...patch } : r)),
+      actionLog: logAction(
+        p,
+        'reservation',
+        `Modification réservation ${res?.reference || resId}`,
+        JSON.stringify(patch)
+      ),
     }));
   };
 
   const handleCheckIn = (resId: string, roomId: string) => {
+    const res = activeProject.reservations.find((r) => r.id === resId);
+    const rm = activeProject.rooms.find((r) => r.id === roomId);
     updateActiveProject((p) => ({
       ...p,
       reservations: p.reservations.map((r) =>
         r.id === resId ? { ...r, status: 'checked_in', roomId } : r
       ),
-      rooms: p.rooms.map((rm) => (rm.id === roomId ? { ...rm, status: 'occupied' } : rm)),
+      rooms: p.rooms.map((x) => (x.id === roomId ? { ...x, status: 'occupied' } : x)),
+      actionLog: logAction(p, 'front_desk', `Check-in ${res?.reference || ''}`, `Chambre ${rm?.number || roomId} occupée`),
     }));
-    trackEvent('check_in', `Check-in effectué (${resId})`);
+    trackEvent('check_in', `Check-in effectué (${res?.reference || resId})`);
   };
 
   const handleCheckOut = (resId: string) => {
     const res = activeProject.reservations.find((r) => r.id === resId);
+    const rm = activeProject.rooms.find((r) => r.id === res?.roomId);
     updateActiveProject((p) => ({
       ...p,
       reservations: p.reservations.map((r) =>
         r.id === resId ? { ...r, status: 'checked_out' } : r
       ),
-      rooms: p.rooms.map((rm) => (rm.id === res?.roomId ? { ...rm, status: 'dirty' } : rm)),
+      rooms: p.rooms.map((x) => (x.id === res?.roomId ? { ...x, status: 'dirty' } : x)),
       folios: p.folios.map((f) => (f.reservationId === resId ? { ...f, isClosed: true } : f)),
+      actionLog: logAction(p, 'front_desk', `Check-out ${res?.reference || ''}`, `Chambre ${rm?.number || ''} passée en À nettoyer`),
     }));
     trackEvent('check_out', `Check-out effectué (${res?.reference || resId})`);
   };
@@ -272,22 +354,19 @@ export function App() {
     resId: string,
     item: { description: string; category: FolioCategory; quantity: number; unitPrice: number; payer: 'guest' | 'company' }
   ) => {
+    const res = activeProject.reservations.find((r) => r.id === resId);
     updateActiveProject((p) => ({
       ...p,
       folios: p.folios.map((f) =>
         f.reservationId === resId
-          ? {
-              ...f,
-              items: [
-                ...f.items,
-                {
-                  id: `fi-${Date.now()}`,
-                  date: p.simulatedDate,
-                  ...item,
-                },
-              ],
-            }
+          ? { ...f, items: [...f.items, { id: `fi-${Date.now()}`, date: p.simulatedDate, ...item }] }
           : f
+      ),
+      actionLog: logAction(
+        p,
+        'billing',
+        `Ajout folio (${res?.reference || ''})`,
+        `${item.description} • ${item.quantity} × ${item.unitPrice} (${item.payer})`
       ),
     }));
     if (item.unitPrice > 0) {
@@ -311,6 +390,7 @@ export function App() {
             }
           : f
       ),
+      actionLog: logAction(p, 'billing', 'Modification payeur (Facture scindée)', `Ligne ${itemId}`),
     }));
   };
 
@@ -318,18 +398,19 @@ export function App() {
     resId: string,
     payment: { method: PaymentMethod; amount: number; payer: 'guest' | 'company' }
   ) => {
+    const res = activeProject.reservations.find((r) => r.id === resId);
     updateActiveProject((p) => ({
       ...p,
       folios: p.folios.map((f) =>
         f.reservationId === resId
-          ? {
-              ...f,
-              payments: [
-                ...f.payments,
-                { id: `pay-${Date.now()}`, date: p.simulatedDate, ...payment },
-              ],
-            }
+          ? { ...f, payments: [...f.payments, { id: `pay-${Date.now()}`, date: p.simulatedDate, ...payment }] }
           : f
+      ),
+      actionLog: logAction(
+        p,
+        'billing',
+        `Encaissement (${res?.reference || ''})`,
+        `${payment.amount} via ${payment.method.toUpperCase()} (${payment.payer})`
       ),
     }));
   };
@@ -363,16 +444,17 @@ export function App() {
         },
         ...p.nightAudits,
       ],
+      actionLog: logAction(p, 'billing', `Night Audit clôturé (${p.simulatedDate})`, `Occupation ${occRate}% • Passage au ${nextDate}`),
     }));
-    trackEvent('night_audit', `Night Audit clôturé pour ${activeProject.simulatedDate}`, {
-      revenue: roomRev,
-    });
+    trackEvent('night_audit', `Night Audit clôturé pour ${activeProject.simulatedDate}`, { revenue: roomRev });
   };
 
   const handleUpdateRoomStatus = (roomId: string, status: RoomStatus) => {
+    const rm = activeProject.rooms.find((r) => r.id === roomId);
     updateActiveProject((p) => ({
       ...p,
       rooms: p.rooms.map((r) => (r.id === roomId ? { ...r, status } : r)),
+      actionLog: logAction(p, 'housekeeping', `Statut Chambre ${rm?.number || ''}`, `Passée en "${status}"`),
     }));
   };
 
@@ -393,6 +475,7 @@ export function App() {
         },
         ...p.maintenanceTickets,
       ],
+      actionLog: logAction(p, 'housekeeping', `Ticket Maintenance Ch. ${rm?.number || ''}`, `${title} (${priority})`),
     }));
   };
 
@@ -402,6 +485,7 @@ export function App() {
       ...p,
       maintenanceTickets: p.maintenanceTickets.map((x) => (x.id === ticketId ? { ...x, status: 'resolved' } : x)),
       rooms: tkt ? p.rooms.map((r) => (r.id === tkt.roomId && r.status === 'out_of_order' ? { ...r, status: 'dirty' } : r)) : p.rooms,
+      actionLog: logAction(p, 'housekeeping', `Ticket résolu Ch. ${tkt?.roomNumber || ''}`, tkt?.title || ''),
     }));
   };
 
@@ -424,9 +508,11 @@ export function App() {
   };
 
   const handleRestockItem = (itemId: string, qty: number) => {
+    const item = activeProject.catalog.find((c) => c.id === itemId);
     updateActiveProject((p) => ({
       ...p,
       catalog: p.catalog.map((c) => (c.id === itemId ? { ...c, stockQty: c.stockQty + qty } : c)),
+      actionLog: logAction(p, 'inventory', `Réapprovisionnement stock`, `+${qty} × ${item?.name || itemId}`),
     }));
   };
 
@@ -438,6 +524,7 @@ export function App() {
         name: newConfig.hotelName,
         config: newConfig,
         rooms: roomsChanged ? buildRooms(newConfig.totalRooms, newConfig.floors, newConfig.currency) : p.rooms,
+        actionLog: logAction(p, 'config', 'Mise à jour paramétrage hôtel', `${newConfig.hotelName} (${newConfig.totalRooms} ch., ${newConfig.currency})`),
       };
     });
     trackEvent('module_toggled', `Paramétrage mis à jour (${newConfig.totalRooms} ch., ${newConfig.currency})`);
@@ -449,19 +536,30 @@ export function App() {
     );
   };
 
-  const handleCreateProject = (name: string, rooms: number, currency: CurrencyCode) => {
+  const handleCreateConfiguredProject = (config: HotelConfig) => {
     const np = createCotonouProject(`proj-${Date.now()}`);
-    np.name = name;
-    np.config.hotelName = name;
-    np.config.totalRooms = rooms;
-    np.config.currency = currency;
-    np.rooms = buildRooms(rooms, Math.max(1, Math.ceil(rooms / 6)), currency);
+    np.name = config.hotelName;
+    np.config = config;
+    np.rooms = buildRooms(config.totalRooms, config.floors, config.currency);
+    np.reservations = [];
+    np.folios = [];
+    np.actionLog = [
+      {
+        id: `act-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        actorName: currentMember.name,
+        actorEmail: currentMember.email,
+        category: 'config',
+        action: 'Création & paramétrage initial du projet',
+        details: `${config.hotelName} • ${config.totalRooms} chambres • ${config.currency}`,
+      },
+    ];
     setMembers((prev) =>
       prev.map((m) =>
         m.id === currentMember.id ? { ...m, projects: [np, ...m.projects], activeProjectId: np.id } : m
       )
     );
-    trackEvent('project_created', `Nouveau projet créé : ${name} (${rooms} ch.)`);
+    trackEvent('project_created', `Nouvel hôtel configuré : ${config.hotelName} (${config.totalRooms} ch.)`);
   };
 
   const handleDuplicateProject = (projectId: string) => {
@@ -495,28 +593,45 @@ export function App() {
     updateActiveProject(() => fresh);
   };
 
+  const handleAddCollaborator = (collab: Omit<ProjectCollaborator, 'addedAt'>) => {
+    updateActiveProject((p) => ({
+      ...p,
+      collaborators: [...(p.collaborators || []), { ...collab, addedAt: new Date().toISOString() }],
+      actionLog: logAction(p, 'team', `Ajout collaborateur`, `${collab.name} (${collab.email} - ${collab.role})`),
+    }));
+  };
+
+  const handleRemoveCollaborator = (email: string) => {
+    updateActiveProject((p) => ({
+      ...p,
+      collaborators: (p.collaborators || []).filter((c) => c.email !== email),
+      actionLog: logAction(p, 'team', `Retrait collaborateur`, email),
+    }));
+  };
+
   const activeScenario = PEDAGOGICAL_SCENARIOS.find((s) => s.id === activeProject.pedagogy.activeScenarioId);
 
+  // Mews Operations exact navigation order
   const navItems = [
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { id: 'planning', label: t.planning, icon: CalendarRange },
-    { id: 'frontDesk', label: t.frontDesk, icon: LogIn },
-    { id: 'billing', label: t.billing, icon: Receipt },
+    { id: 'planning', label: 'Timeline (Planning)', icon: CalendarRange },
+    { id: 'frontDesk', label: 'Reservations & Front Desk', icon: LogIn },
     ...(activeProject.config.modules.housekeepingMode !== 'disabled'
-      ? [{ id: 'housekeeping', label: t.housekeeping, icon: Sparkles }]
+      ? [{ id: 'housekeeping', label: 'Housekeeping & Maintenance', icon: Sparkles }]
       : []),
+    { id: 'billing', label: 'Billing & Accounting', icon: Receipt },
     ...(activeProject.config.modules.inventory || activeProject.config.modules.barAndFood || activeProject.config.modules.roomService
-      ? [{ id: 'inventory', label: t.inventory, icon: Package }]
+      ? [{ id: 'inventory', label: 'POS & Inventory', icon: Package }]
       : []),
+    { id: 'memberStats', label: t.memberStats, icon: BarChart2 },
     { id: 'reports', label: t.reports, icon: BarChart3 },
-    { id: 'memberStats', label: t.memberStats, icon: BarChart3 },
-    { id: 'configurator', label: t.configurator, icon: Sliders },
+    { id: 'configurator', label: 'Marketplace / Modules', icon: Sliders },
     { id: 'projects', label: t.projects, icon: FolderKanban },
+    { id: 'auditLog', label: 'Historique Actions', icon: History },
     { id: 'pedagogy', label: t.pedagogy, icon: GraduationCap },
     ...(currentMember.role === 'admin' ? [{ id: 'admin', label: t.adminSpace, icon: ShieldAlert }] : []),
   ];
 
-  // Quick search results (Mews Commander style)
   const searchMatches = searchQuery.trim()
     ? activeProject.reservations.filter((r) => {
         const g = activeProject.guests.find((x) => x.id === r.guestId);
@@ -530,260 +645,307 @@ export function App() {
     : [];
 
   return (
-    <div className="min-h-screen flex bg-slate-100 text-slate-900">
-      {/* Deep Navy Mews-Style Sidebar */}
-      <aside className="no-print w-64 bg-slate-900 text-slate-300 flex flex-col shrink-0">
-        <div className="p-5 border-b border-slate-800 flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-md">
-            <Building2 className="w-5 h-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="font-bold text-white text-base leading-none">OpenPMS</div>
-            <div className="text-[11px] text-slate-400 truncate mt-1">{activeProject.config.hotelName}</div>
-          </div>
+    <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900">
+      {/* MEWS-STYLE TOP COMMAND BAR (56px) */}
+      <header className="no-print h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between gap-3 sticky top-0 z-40 shadow-2xs">
+        {/* Left: Hamburger + Brand + Property Switcher (Mews signature) */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100 text-slate-600"
+            aria-label="Menu"
+          >
+            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+
+          <OpenHotelPmsLogo size="sm" darkText />
+
+          <div className="hidden sm:block h-5 w-px bg-slate-200 mx-1" />
+
+          {/* Property Switcher directly in Top Bar */}
+          <select
+            value={activeProject.id}
+            onChange={(e) => handleSwitchProject(e.target.value)}
+            className="hidden sm:block max-w-[200px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-xs font-semibold text-slate-800 border border-transparent focus:border-indigo-500 focus:outline-none truncate"
+            title="Changer d'hôtel / projet"
+          >
+            {currentMember.projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.config.hotelName} ({p.config.currency})
+              </option>
+            ))}
+          </select>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = activeTab === item.id;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
-                  active
-                    ? 'bg-indigo-600 text-white shadow-xs'
-                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                }`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span className="truncate">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
+        {/* Center: Mews Global Commander Search */}
+        <div className="relative flex-1 max-w-md hidden md:block">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2" />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={lang === 'fr' ? 'Rechercher client, réservation, chambre...' : 'Search guests, bookings, rooms...'}
+            className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-indigo-500 text-xs focus:outline-none transition"
+          />
+          {searchMatches.length > 0 && (
+            <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 divide-y text-xs">
+              {searchMatches.slice(0, 6).map((r) => {
+                const g = activeProject.guests.find((x) => x.id === r.guestId);
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      setSelectedResId(r.id);
+                      setSearchQuery('');
+                    }}
+                    className="w-full text-left px-3 py-2.5 hover:bg-indigo-50 flex justify-between"
+                  >
+                    <span className="font-semibold text-slate-900">
+                      {g?.firstName} {g?.lastName}
+                    </span>
+                    <span className="text-slate-400">{r.reference} • {r.checkIn}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-        <div className="p-4 border-t border-slate-800 text-xs space-y-2">
-          <div className="text-slate-400 truncate">
-            <strong className="text-white block truncate">{currentMember.name}</strong>
-            {currentMember.organization}
+        {/* Right: Quick Create, Auto-Save, Clock, Lang, Profile */}
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            onClick={() => setActiveTab('planning')}
+            className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1 shadow-2xs"
+            title="Accès rapide Timeline & Réservation"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span className="hidden xl:inline">Réserver</span>
+          </button>
+
+          <div
+            className="hidden xl:flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 font-medium text-[11px]"
+            title="Sauvegarde automatique à l'instant T"
+          >
+            {cloudSynced ? <Cloud className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
+            <span>{lastSavedTime}</span>
           </div>
+
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold">
+            <Clock className="w-3.5 h-3.5 text-indigo-600" />
+            <span>{activeProject.simulatedDate}</span>
+          </div>
+
+          <button
+            onClick={handleRunNightAudit}
+            className="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold flex items-center gap-1"
+            title="Night Audit (+1 Jour)"
+          >
+            <Moon className="w-3 h-3 text-amber-400" />
+            <span className="hidden sm:inline">+1J</span>
+          </button>
+
+          <button
+            onClick={() => setLang(lang === 'fr' ? 'en' : 'fr')}
+            className="px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold flex items-center gap-1"
+          >
+            <Globe className="w-3.5 h-3.5" /> {lang.toUpperCase()}
+          </button>
+
           <button
             onClick={() => setCurrentMemberId(null)}
-            className="w-full py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold flex items-center justify-center gap-1.5"
+            className="p-1.5 rounded-lg border border-slate-200 hover:bg-red-50 hover:text-red-600 text-slate-600"
+            title={t.logout}
           >
-            <LogOut className="w-3.5 h-3.5" /> {t.logout}
+            <LogOut className="w-4 h-4" />
           </button>
         </div>
-      </aside>
+      </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Mews Command & Pedagogical Bar */}
-        <header className="no-print bg-white border-b border-slate-200 px-6 py-3 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30">
-          {/* Quick Search */}
-          <div className="relative w-full sm:w-72">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-            <input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder={lang === 'fr' ? 'Rechercher client, réf. OPMS...' : 'Search guest, ref...'}
-              className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-indigo-500 text-xs focus:outline-none"
-            />
-            {searchMatches.length > 0 && (
-              <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-40 divide-y text-xs">
-                {searchMatches.slice(0, 5).map((r) => {
-                  const g = activeProject.guests.find((x) => x.id === r.guestId);
-                  return (
-                    <button
-                      key={r.id}
-                      onClick={() => {
-                        setSelectedResId(r.id);
-                        setSearchQuery('');
-                      }}
-                      className="w-full text-left px-3 py-2 hover:bg-indigo-50 flex justify-between"
-                    >
-                      <span className="font-semibold">{g?.firstName} {g?.lastName}</span>
-                      <span className="text-slate-400">{r.reference}</span>
-                    </button>
-                  );
-                })}
+      <div className="flex-1 flex min-h-0 relative">
+        {/* MEWS-STYLE LEFT NAVIGATION RAIL */}
+        <aside
+          className={`no-print ${
+            mobileMenuOpen ? 'fixed inset-y-14 left-0 z-40 flex' : 'hidden lg:flex'
+          } w-60 bg-slate-900 text-slate-300 flex-col shrink-0 border-r border-slate-800`}
+        >
+          <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => {
+                    setActiveTab(item.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
+                    active
+                      ? 'bg-indigo-600 text-white shadow-xs'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="p-3.5 border-t border-slate-800 text-[11px] space-y-1 bg-slate-950/40">
+            <div className="font-bold text-white truncate">{currentMember.name}</div>
+            <div className="text-slate-400 truncate">{currentMember.organization}</div>
+            <div className="text-amber-400 font-semibold pt-0.5">
+              {activeProject.pedagogy.mode === 'live'
+                ? 'Mode Hôtel Réel'
+                : `Mode ${activeProject.pedagogy.mode} • ${activeProject.pedagogy.score} pts`}
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Workspace */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {activeScenario && activeProject.pedagogy.mode === 'learning' && activeTab !== 'pedagogy' && (
+            <div className="no-print bg-indigo-50 border-b border-indigo-200 px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="font-bold text-indigo-900">Exercice actif (Niv. {activeScenario.level}) :</span>{' '}
+                <span className="text-indigo-800">{lang === 'fr' ? activeScenario.titleFr : activeScenario.titleEn}</span>
               </div>
+              <button
+                onClick={() => setActiveTab('pedagogy')}
+                className="font-bold text-indigo-700 hover:underline shrink-0"
+              >
+                Voir les étapes →
+              </button>
+            </div>
+          )}
+
+          <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">
+            {activeTab === 'dashboard' && (
+              <DashboardView
+                project={activeProject}
+                lang={lang}
+                onNavigate={setActiveTab}
+                onSelectReservation={setSelectedResId}
+              />
             )}
-          </div>
-
-          {/* Clock, Mode & Lang */}
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <div className="px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 font-semibold">
-              {activeProject.pedagogy.mode === 'learning'
-                ? t.modeLearning
-                : activeProject.pedagogy.mode === 'exercise'
-                ? t.modeExercise
-                : activeProject.pedagogy.mode === 'exam'
-                ? t.modeExam
-                : t.modeLive}{' '}
-              • {activeProject.pedagogy.score} pts
-            </div>
-
-            <div className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5 text-indigo-600" />
-              {activeProject.simulatedDate}
-            </div>
-
-            <button
-              onClick={handleRunNightAudit}
-              className="px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold flex items-center gap-1"
-              title="Clôturer la journée et avancer l'horloge"
-            >
-              <Moon className="w-3 h-3 text-amber-400" /> +1J
-            </button>
-
-            <button
-              onClick={() => setLang(lang === 'fr' ? 'en' : 'fr')}
-              className="px-2.5 py-1 rounded-lg border border-slate-300 hover:bg-slate-50 font-bold flex items-center gap-1"
-            >
-              <Globe className="w-3.5 h-3.5" /> {lang.toUpperCase()}
-            </button>
-          </div>
-        </header>
-
-        {/* Pedagogical Assistant Bar (hidden in Exam / Live mode) */}
-        {activeScenario && activeProject.pedagogy.mode === 'learning' && activeTab !== 'pedagogy' && (
-          <div className="no-print bg-indigo-50 border-b border-indigo-200 px-6 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
-            <div>
-              <span className="font-bold text-indigo-900">Exercice actif (Niv. {activeScenario.level}) :</span>{' '}
-              <span className="text-indigo-800">{lang === 'fr' ? activeScenario.titleFr : activeScenario.titleEn}</span> —{' '}
-              <span className="text-slate-600">{lang === 'fr' ? activeScenario.objectiveFr : activeScenario.objectiveEn}</span>
-            </div>
-            <button
-              onClick={() => setActiveTab('pedagogy')}
-              className="font-bold text-indigo-700 hover:underline shrink-0"
-            >
-              Voir les étapes →
-            </button>
-          </div>
-        )}
-
-        {/* Workspace */}
-        <main className="flex-1 p-6 max-w-7xl w-full mx-auto">
-          {activeTab === 'dashboard' && (
-            <DashboardView
-              project={activeProject}
-              lang={lang}
-              onNavigate={setActiveTab}
-              onSelectReservation={setSelectedResId}
-            />
-          )}
-          {activeTab === 'planning' && (
-            <TimelinePlanningView
-              project={activeProject}
-              lang={lang}
-              onSelectReservation={setSelectedResId}
-              onCreateGuest={handleCreateGuest}
-              onCreateReservation={handleCreateReservation}
-            />
-          )}
-          {(activeTab === 'frontDesk' || activeTab === 'billing') && (
-            <FrontDeskBillingView
-              mode={activeTab}
-              project={activeProject}
-              lang={lang}
-              onSelectReservation={setSelectedResId}
-              onRunNightAudit={handleRunNightAudit}
-            />
-          )}
-          {(activeTab === 'housekeeping' || activeTab === 'inventory') && (
-            <HousekeepingInventoryView
-              mode={activeTab}
-              project={activeProject}
-              lang={lang}
-              onUpdateRoomStatus={handleUpdateRoomStatus}
-              onAddMaintenanceTicket={handleAddMaintenanceTicket}
-              onResolveTicket={handleResolveTicket}
-              onSellCatalogItemToRoom={handleSellCatalogItem}
-              onRestockItem={handleRestockItem}
-            />
-          )}
-          {(activeTab === 'configurator' || activeTab === 'projects') && (
-            <ConfiguratorProjectsView
-              mode={activeTab}
-              project={activeProject}
-              projects={currentMember.projects}
-              lang={lang}
-              onUpdateConfig={handleUpdateConfig}
-              onSwitchProject={handleSwitchProject}
-              onCreateProject={handleCreateProject}
-              onDuplicateProject={handleDuplicateProject}
-              onImportProject={handleImportProject}
-              onResetCurrentProject={handleResetCurrentProject}
-            />
-          )}
-          {(activeTab === 'pedagogy' || activeTab === 'reports') && (
-            <PedagogyReportsView
-              mode={activeTab}
-              project={activeProject}
-              lang={lang}
-              onStartScenario={(scId, targetTab) => {
-                updateActiveProject((p) => ({
-                  ...p,
-                  pedagogy: { ...p.pedagogy, activeScenarioId: scId },
-                }));
-                setActiveTab(targetTab);
-              }}
-              onCompleteScenario={(scId, points) => {
-                updateActiveProject((p) => ({
-                  ...p,
-                  pedagogy: {
-                    ...p.pedagogy,
-                    score: p.pedagogy.score + points,
-                    completedScenarios: Array.from(new Set([...p.pedagogy.completedScenarios, scId])),
-                  },
-                }));
-              }}
-              onSubmitQuiz={(lvl, score) => {
-                updateActiveProject((p) => ({
-                  ...p,
-                  pedagogy: {
-                    ...p.pedagogy,
-                    score: p.pedagogy.score + 50,
-                    quizScores: { ...p.pedagogy.quizScores, [lvl]: score },
-                  },
-                }));
-              }}
-              onChangeMode={(m: PedagogicalMode) => {
-                updateActiveProject((p) => ({
-                  ...p,
-                  pedagogy: { ...p.pedagogy, mode: m },
-                }));
-              }}
-              onNavigate={setActiveTab}
-            />
-          )}
-          {activeTab === 'memberStats' && (
-            <MemberStatsView
-              activeProject={activeProject}
-              allProjects={currentMember.projects}
-              lang={lang}
-            />
-          )}
-          {activeTab === 'admin' && currentMember.role === 'admin' && (
-            <AdminSpaceView
-              lang={lang}
-              members={members}
-              telemetry={telemetry}
-              onToggleMemberStatus={(memberId) =>
-                setMembers((prev) =>
-                  prev.map((m) =>
-                    m.id === memberId
-                      ? { ...m, status: m.status === 'active' ? 'suspended' : 'active' }
-                      : m
+            {activeTab === 'planning' && (
+              <TimelinePlanningView
+                project={activeProject}
+                lang={lang}
+                onSelectReservation={setSelectedResId}
+                onCreateGuest={handleCreateGuest}
+                onCreateReservation={handleCreateReservation}
+              />
+            )}
+            {(activeTab === 'frontDesk' || activeTab === 'billing') && (
+              <FrontDeskBillingView
+                mode={activeTab}
+                project={activeProject}
+                lang={lang}
+                onSelectReservation={setSelectedResId}
+                onRunNightAudit={handleRunNightAudit}
+              />
+            )}
+            {(activeTab === 'housekeeping' || activeTab === 'inventory') && (
+              <HousekeepingInventoryView
+                mode={activeTab}
+                project={activeProject}
+                lang={lang}
+                onUpdateRoomStatus={handleUpdateRoomStatus}
+                onAddMaintenanceTicket={handleAddMaintenanceTicket}
+                onResolveTicket={handleResolveTicket}
+                onSellCatalogItemToRoom={handleSellCatalogItem}
+                onRestockItem={handleRestockItem}
+              />
+            )}
+            {(activeTab === 'configurator' || activeTab === 'projects') && (
+              <ConfiguratorProjectsView
+                mode={activeTab}
+                project={activeProject}
+                projects={currentMember.projects}
+                lang={lang}
+                onUpdateConfig={handleUpdateConfig}
+                onSwitchProject={handleSwitchProject}
+                onCreateConfiguredProject={handleCreateConfiguredProject}
+                onDuplicateProject={handleDuplicateProject}
+                onImportProject={handleImportProject}
+                onResetCurrentProject={handleResetCurrentProject}
+              />
+            )}
+            {(activeTab === 'pedagogy' || activeTab === 'reports') && (
+              <PedagogyReportsView
+                mode={activeTab}
+                project={activeProject}
+                lang={lang}
+                onStartScenario={(scId, targetTab) => {
+                  updateActiveProject((p) => ({
+                    ...p,
+                    pedagogy: { ...p.pedagogy, activeScenarioId: scId },
+                  }));
+                  setActiveTab(targetTab);
+                }}
+                onCompleteScenario={(scId, points) => {
+                  updateActiveProject((p) => ({
+                    ...p,
+                    pedagogy: {
+                      ...p.pedagogy,
+                      score: p.pedagogy.score + points,
+                      completedScenarios: Array.from(new Set([...p.pedagogy.completedScenarios, scId])),
+                    },
+                  }));
+                }}
+                onSubmitQuiz={(lvl, score) => {
+                  updateActiveProject((p) => ({
+                    ...p,
+                    pedagogy: {
+                      ...p.pedagogy,
+                      score: p.pedagogy.score + 50,
+                      quizScores: { ...p.pedagogy.quizScores, [lvl]: score },
+                    },
+                  }));
+                }}
+                onChangeMode={(m: PedagogicalMode) => {
+                  updateActiveProject((p) => ({
+                    ...p,
+                    pedagogy: { ...p.pedagogy, mode: m },
+                  }));
+                }}
+                onNavigate={setActiveTab}
+              />
+            )}
+            {activeTab === 'memberStats' && (
+              <MemberStatsView
+                activeProject={activeProject}
+                allProjects={currentMember.projects}
+                lang={lang}
+              />
+            )}
+            {activeTab === 'auditLog' && (
+              <AuditLogTeamView
+                project={activeProject}
+                lang={lang}
+                onAddCollaborator={handleAddCollaborator}
+                onRemoveCollaborator={handleRemoveCollaborator}
+              />
+            )}
+            {activeTab === 'admin' && currentMember.role === 'admin' && (
+              <AdminSpaceView
+                lang={lang}
+                members={members}
+                telemetry={telemetry}
+                onToggleMemberStatus={(memberId) =>
+                  setMembers((prev) =>
+                    prev.map((m) =>
+                      m.id === memberId
+                        ? { ...m, status: m.status === 'active' ? 'suspended' : 'active' }
+                        : m
+                    )
                   )
-                )
-              }
-            />
-          )}
-        </main>
+                }
+              />
+            )}
+          </main>
+        </div>
       </div>
 
       {/* Mews Smart Detail Slide-Out Drawer */}

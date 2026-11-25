@@ -1,4 +1,5 @@
 import type {
+  CurrencyCode,
   HotelProject,
   MemberAccount,
   Room,
@@ -6,7 +7,7 @@ import type {
   TelemetryEvent,
 } from '../types/pms';
 
-export function buildRooms(totalRooms: number, floors: number, currency: 'FCFA' | 'EUR' | 'USD'): Room[] {
+export function buildRooms(totalRooms: number, floors: number, currency: CurrencyCode): Room[] {
   const types: RoomType[] = ['Standard', 'Standard', 'Supérieure', 'Deluxe', 'Suite'];
   const baseRatesFCFA: Record<RoomType, number> = {
     Standard: 45000,
@@ -75,6 +76,8 @@ export function createCotonouProject(id = 'proj-cotonou-1'): HotelProject {
         barAndFood: true,
         minibar: true,
         housekeepingMode: 'optional_guest_choice',
+        breakfastIncluded: true,
+        onlineCheckIn: true,
         spa: true,
         parking: true,
         inventory: true,
@@ -84,6 +87,7 @@ export function createCotonouProject(id = 'proj-cotonou-1'): HotelProject {
         vatRate: 18,
         cityTaxPerNight: 1500,
         serviceChargeRate: 5,
+        cancellationPolicy: '24h',
         allowSplitBilling: true,
         allowGroupBilling: true,
         allowDiscountsAndCredits: true,
@@ -347,6 +351,30 @@ export function createCotonouProject(id = 'proj-cotonou-1'): HotelProject {
       quizScores: {},
       activeScenarioId: 'sc-1-1',
     },
+    collaborators: [
+      { email: 'reception@lepalmier.bj', name: 'Nadège T. (Réception)', role: 'reception', addedAt: '2026-11-20T09:00:00Z' },
+      { email: 'gouvernante@lepalmier.bj', name: 'Amina K. (Gouvernante)', role: 'housekeeping', addedAt: '2026-11-20T09:00:00Z' },
+    ],
+    actionLog: [
+      {
+        id: 'act-1',
+        timestamp: '2026-11-25T07:45:00Z',
+        actorName: 'Nadège T. (Réception)',
+        actorEmail: 'reception@lepalmier.bj',
+        category: 'reservation',
+        action: 'Création réservation OPMS-2604',
+        details: 'Aïcha Diallo • Chambre 106 • 2 nuits (45 000 FCFA/nuit)',
+      },
+      {
+        id: 'act-2',
+        timestamp: '2026-11-25T08:10:00Z',
+        actorName: 'Amina K. (Gouvernante)',
+        actorEmail: 'gouvernante@lepalmier.bj',
+        category: 'housekeeping',
+        action: 'Chambre 103 passée en Inspectée',
+        details: 'Prête pour l’arrivée de Marc Dubois',
+      },
+    ],
   };
 }
 
