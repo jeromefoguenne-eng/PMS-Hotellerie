@@ -23,6 +23,7 @@ import {
   Plus,
   CheckCircle2,
   Cloud,
+  Users,
 } from 'lucide-react';
 import type {
   CatalogItem,
@@ -68,6 +69,7 @@ import { PedagogyReportsView } from './components/PedagogyReportsView';
 import { AdminSpaceView } from './components/AdminSpaceView';
 import { MemberStatsView } from './components/MemberStatsView';
 import { AuditLogTeamView } from './components/AuditLogTeamView';
+import { GuestCrmView } from './components/GuestCrmView';
 
 export function App() {
   const [lang, setLang] = useState<Language>('fr');
@@ -618,6 +620,7 @@ export function App() {
     { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
     { id: 'planning', label: 'Timeline (Planning)', icon: CalendarRange },
     { id: 'frontDesk', label: 'Reservations & Front Desk', icon: LogIn },
+    { id: 'crm', label: 'CRM Clients & Profils', icon: Users },
     ...(activeProject.config.modules.housekeepingMode !== 'disabled'
       ? [{ id: 'housekeeping', label: 'Housekeeping & Maintenance', icon: Sparkles }]
       : []),
@@ -846,6 +849,20 @@ export function App() {
                 lang={lang}
                 onSelectReservation={setSelectedResId}
                 onRunNightAudit={handleRunNightAudit}
+              />
+            )}
+            {activeTab === 'crm' && (
+              <GuestCrmView
+                project={activeProject}
+                lang={lang}
+                onCreateGuest={handleCreateGuest}
+                onUpdateGuest={(guestId, patch) =>
+                  updateActiveProject((p) => ({
+                    ...p,
+                    guests: p.guests.map((g) => (g.id === guestId ? { ...g, ...patch } : g)),
+                  }))
+                }
+                onSelectReservation={setSelectedResId}
               />
             )}
             {(activeTab === 'housekeeping' || activeTab === 'inventory') && (
