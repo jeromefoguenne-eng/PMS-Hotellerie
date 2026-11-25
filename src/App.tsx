@@ -648,8 +648,8 @@ export function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-100 text-slate-900">
-      {/* MEWS-STYLE TOP COMMAND BAR (56px) */}
-      <header className="no-print h-14 bg-white border-b border-slate-200 px-4 flex items-center justify-between gap-3 sticky top-0 z-40 shadow-2xs">
+      {/* MEWS-STYLE TOP COMMAND BAR (64px) */}
+      <header className="no-print h-16 bg-white border-b border-slate-200 px-3 sm:px-5 flex items-center justify-between gap-2 sm:gap-3 sticky top-0 z-40 shadow-2xs">
         {/* Left: Hamburger + Brand + Property Switcher (Mews signature) */}
         <div className="flex items-center gap-3">
           <button
@@ -766,8 +766,8 @@ export function App() {
         {/* MEWS-STYLE LEFT NAVIGATION RAIL */}
         <aside
           className={`no-print ${
-            mobileMenuOpen ? 'fixed inset-y-14 left-0 z-40 flex' : 'hidden lg:flex'
-          } w-60 bg-slate-900 text-slate-300 flex-col shrink-0 border-r border-slate-800`}
+            mobileMenuOpen ? 'fixed inset-y-16 left-0 z-40 flex shadow-2xl' : 'hidden lg:flex'
+          } w-64 lg:w-60 bg-slate-900 text-slate-300 flex-col shrink-0 border-r border-slate-800`}
         >
           <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
             {navItems.map((item) => {
@@ -821,7 +821,7 @@ export function App() {
             </div>
           )}
 
-          <main className="flex-1 p-4 sm:p-6 max-w-7xl w-full mx-auto">
+          <main className="flex-1 p-3 sm:p-5 lg:p-6 pb-20 sm:pb-6 max-w-7xl w-full mx-auto">
             {activeTab === 'dashboard' && (
               <DashboardView
                 project={activeProject}
@@ -964,6 +964,32 @@ export function App() {
           </main>
         </div>
       </div>
+
+      {/* Mobile Bottom Quick Navigation (Smartphones) */}
+      <nav className="no-print sm:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-30 flex items-center justify-around py-1.5 text-[10px] font-semibold text-slate-600">
+        {[
+          { id: 'dashboard', label: 'Accueil', icon: LayoutDashboard },
+          { id: 'planning', label: 'Timeline', icon: CalendarRange },
+          { id: 'frontDesk', label: 'Réception', icon: LogIn },
+          { id: 'billing', label: 'Caisse', icon: Receipt },
+          { id: 'memberStats', label: 'Stats', icon: BarChart2 },
+        ].map((item) => {
+          const Icon = item.icon;
+          const active = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg ${
+                active ? 'text-indigo-600' : 'text-slate-500'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{item.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {/* Mews Smart Detail Slide-Out Drawer */}
       {selectedResId && (
