@@ -1,4 +1,5 @@
 import type { CurrencyCode } from '../types/pms';
+import { sanitizeCsvCell } from './security';
 
 export function formatMoney(amount: number, currency: CurrencyCode): string {
   const rounded = Math.round(amount);
@@ -24,7 +25,7 @@ export function diffNights(checkIn: string, checkOut: string): number {
 
 export function downloadCSV(filename: string, rows: (string | number)[][]): void {
   const csvContent = rows
-    .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(';'))
+    .map((r) => r.map((cell) => sanitizeCsvCell(cell)).join(';'))
     .join('\n');
   const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);

@@ -9,6 +9,8 @@ import {
   Ban,
   Trash2,
   Eye,
+  Mail,
+  Copy,
 } from 'lucide-react';
 import type { Language, MemberAccount, SiteVisitEvent, TelemetryEvent, UserRole } from '../types/pms';
 import { downloadCSV, downloadJSON } from '../lib/format';
@@ -42,6 +44,7 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
   const [cloudSaved, setCloudSaved] = useState(false);
   const [granularity, setGranularity] = useState<TimeGranularity>('day');
   const [filterMemberId, setFilterMemberId] = useState<string>('ALL');
+  const [emailsCopied, setEmailsCopied] = useState(false);
 
   const analytics = useMemo(
     () => computeAdminAnalytics(members, telemetry, granularity, filterMemberId),
@@ -397,6 +400,50 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
               })}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Mailing List & Contact Emails Collection */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs space-y-3 text-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <Mail className="w-4 h-4 text-indigo-600" />
+              Collecte des Adresses E-mail des Membres ({members.length})
+            </h3>
+            <p className="text-slate-500 mt-0.5">
+              Tous les membres inscrits ont accepté le partage de leur e-mail via la Charte OpenHotelPMS.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const list = members.map((m) => m.email).join(', ');
+                navigator.clipboard?.writeText(list);
+                setEmailsCopied(true);
+                setTimeout(() => setEmailsCopied(false), 2000);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1.5"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              {emailsCopied ? 'E-mails copiés ✓' : 'Copier tous les e-mails'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const rows: (string | number)[][] = [['Nom', 'E-mail', 'Organisation', 'Rôle', 'Date inscription']];
+                members.forEach((m) => rows.push([m.name, m.email, m.organization, m.role, m.createdAt.slice(0, 10)]));
+                downloadCSV(`openhotelpms-contacts-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+              }}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 font-semibold flex items-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5" /> Export Contacts CSV
+            </button>
+          </div>
+        </div>
+        <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 font-mono text-[11px] text-slate-700 break-all">
+          {members.map((m) => m.email).join(', ')}
         </div>
       </div>
 

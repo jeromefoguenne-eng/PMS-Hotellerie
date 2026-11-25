@@ -75,10 +75,10 @@ export const SimpleBarChart: React.FC<SimpleBarChartProps> = ({
             viewBox={`0 0 ${Math.max(360, data.length * 48)} ${height}`}
             className="w-full h-48 overflow-visible"
           >
-            {/* Horizontal grid lines */}
-            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+            {/* Horizontal grid lines (deduplicated labels for small values) */}
+            {(maxVal < 4 ? [0, 0.5, 1] : [0, 0.25, 0.5, 0.75, 1]).map((ratio) => {
               const y = paddingTop + chartHeight * (1 - ratio);
-              const val = Math.round(maxVal * ratio);
+              const val = Math.round(maxVal * ratio * 10) / 10;
               return (
                 <g key={ratio}>
                   <line

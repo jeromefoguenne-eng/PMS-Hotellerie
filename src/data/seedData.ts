@@ -394,109 +394,26 @@ export function createCotonouProject(id = 'proj-cotonou-1'): HotelProject {
 }
 
 export function createSeedMembers(): MemberAccount[] {
-  const cot = createCotonouProject('proj-cotonou-admin');
-  const studentProj = createCotonouProject('proj-student-demo');
-  studentProj.name = 'TP Étudiant — Hôtel Le Palmier';
-
-  const hotelierProj = createCotonouProject('proj-hotelier-1');
-  hotelierProj.name = 'Auberge du Lac — Nokoué';
-  hotelierProj.config.hotelName = 'Auberge du Lac';
-  hotelierProj.config.totalRooms = 8;
-  hotelierProj.rooms = buildRooms(8, 2, 'FCFA');
-  hotelierProj.pedagogy.mode = 'live';
-
+  const mainProj = createCotonouProject('proj-admin-main');
   return [
     {
-      id: 'mem-admin',
-      email: 'admin@openpms.org',
-      passwordHash: 'admin123',
+      id: 'mem-admin-jerome',
+      email: 'jerfog2@hotmail.com',
+      passwordHash: '90ace028e42349cf8bb36d5da304d93a136fc7fd96631d98250de6164c80e4ee',
       name: 'Jérôme Foguenne (Admin)',
-      organization: 'OpenPMS / HECh',
+      organization: 'OpenHotelPMS / HECh',
       role: 'admin',
       status: 'active',
       createdAt: '2026-11-01T08:00:00Z',
-      lastActiveAt: '2026-11-25T08:10:00Z',
+      lastActiveAt: new Date().toISOString(),
       charterAccepted: true,
       charterAcceptedAt: '2026-11-01T08:00:00Z',
-      activeProjectId: cot.id,
-      projects: [cot],
-    },
-    {
-      id: 'mem-student',
-      email: 'etudiant@hech.be',
-      passwordHash: 'etudiant123',
-      name: 'Amina Kouassi (Étudiante)',
-      organization: 'Formation Hôtelière Bénin-HECh',
-      role: 'member',
-      status: 'active',
-      createdAt: '2026-11-10T10:00:00Z',
-      lastActiveAt: '2026-11-25T07:50:00Z',
-      charterAccepted: true,
-      charterAcceptedAt: '2026-11-10T10:00:00Z',
-      activeProjectId: studentProj.id,
-      projects: [studentProj],
-    },
-    {
-      id: 'mem-hotelier',
-      email: 'contact@aubergedulac.bj',
-      passwordHash: 'hotel123',
-      name: 'Patrice Soglo (Hôtelier)',
-      organization: 'Auberge du Lac — Bénin',
-      role: 'member',
-      status: 'active',
-      createdAt: '2026-11-15T14:00:00Z',
-      lastActiveAt: '2026-11-24T19:20:00Z',
-      charterAccepted: true,
-      charterAcceptedAt: '2026-11-15T14:00:00Z',
-      activeProjectId: hotelierProj.id,
-      projects: [hotelierProj],
+      activeProjectId: mainProj.id,
+      projects: [mainProj],
     },
   ];
 }
 
 export function createSeedTelemetry(): TelemetryEvent[] {
-  return [
-    {
-      id: 'tel-1',
-      memberId: 'mem-student',
-      memberName: 'Amina Kouassi (Étudiante)',
-      projectId: 'proj-student-demo',
-      projectName: 'TP Étudiant — Hôtel Le Palmier',
-      timestamp: '2026-11-25T07:45:00Z',
-      type: 'reservation_created',
-      revenueDelta: 90000,
-      roomsDelta: 1,
-      itemsDelta: 0,
-      currency: 'FCFA',
-      detail: 'Réservation OPMS-2604 (2 nuits Standard)',
-    },
-    {
-      id: 'tel-2',
-      memberId: 'mem-hotelier',
-      memberName: 'Patrice Soglo (Hôtelier)',
-      projectId: 'proj-hotelier-1',
-      projectName: 'Auberge du Lac — Nokoué',
-      timestamp: '2026-11-24T18:30:00Z',
-      type: 'item_sold',
-      revenueDelta: 16500,
-      roomsDelta: 0,
-      itemsDelta: 3,
-      currency: 'FCFA',
-      detail: 'Vente Bar & Room Service (2 cocktails + 1 plat)',
-    },
-    {
-      id: 'tel-3',
-      memberId: 'mem-hotelier',
-      memberName: 'Patrice Soglo (Hôtelier)',
-      projectId: 'proj-hotelier-1',
-      projectName: 'Auberge du Lac — Nokoué',
-      timestamp: '2026-11-24T22:00:00Z',
-      type: 'night_audit',
-      revenueDelta: 264000,
-      roomsDelta: 4,
-      itemsDelta: 0,
-      currency: 'FCFA',
-      detail: 'Clôture Night Audit du 2026-11-24',
-    },
-  ];
+  return [];
 }

@@ -1,10 +1,10 @@
 import type { Language, MemberAccount, SiteVisitEvent, TelemetryEvent } from '../types/pms';
 import { createSeedMembers, createSeedTelemetry } from '../data/seedData';
 
-const MEMBERS_KEY = 'openpms_members_v1';
-const TELEMETRY_KEY = 'openpms_telemetry_v1';
-const VISITS_KEY = 'openpms_visits_v1';
-const CURRENT_USER_KEY = 'openpms_current_member_id_v1';
+const MEMBERS_KEY = 'openpms_members_v2';
+const TELEMETRY_KEY = 'openpms_telemetry_v2';
+const VISITS_KEY = 'openpms_visits_v2';
+const CURRENT_USER_KEY = 'openpms_current_member_id_v2';
 const CLOUD_CONFIG_KEY = 'openpms_cloud_config_v1';
 
 export interface CloudConfig {
@@ -108,11 +108,7 @@ export function loadSiteVisits(): SiteVisitEvent[] {
   } catch {
     // ignore
   }
-  const seed: SiteVisitEvent[] = [
-    { id: 'v-1', timestamp: '2026-11-23T09:15:00Z', memberId: 'mem-student', memberName: 'Amina Kouassi (Étudiante)', device: 'desktop', language: 'fr', tab: 'planning' },
-    { id: 'v-2', timestamp: '2026-11-24T14:20:00Z', memberId: 'mem-hotelier', memberName: 'Patrice Soglo (Hôtelier)', device: 'tablet', language: 'fr', tab: 'dashboard' },
-    { id: 'v-3', timestamp: '2026-11-25T08:05:00Z', memberId: 'mem-admin', memberName: 'Jérôme Foguenne (Admin)', device: 'desktop', language: 'fr', tab: 'admin' },
-  ];
+  const seed: SiteVisitEvent[] = [];
   localStorage.setItem(VISITS_KEY, JSON.stringify(seed));
   return seed;
 }

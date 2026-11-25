@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Sliders, FolderKanban, Plus, Copy, Download, Upload, RotateCcw, Check, Sparkles } from 'lucide-react';
 import type { CatalogItem, CurrencyCode, HotelConfig, HotelProject, Language, PaymentMethod, Room, ServicePackage } from '../types/pms';
 import { downloadJSON } from '../lib/format';
+import { parseSafeImportedProject } from '../lib/security';
 import { PropertyCatalogEditor } from './PropertyCatalogEditor';
 
 interface ConfiguratorProjectsViewProps {
@@ -130,12 +131,8 @@ export const ConfiguratorProjectsView: React.FC<ConfiguratorProjectsViewProps> =
                   const file = e.target.files?.[0];
                   if (!file) return;
                   file.text().then((txt) => {
-                    try {
-                      const parsed = JSON.parse(txt) as HotelProject;
-                      if (parsed && parsed.config && parsed.rooms) onImportProject(parsed);
-                    } catch {
-                      // ignore
-                    }
+                    const parsed = parseSafeImportedProject(txt);
+                    if (parsed) onImportProject(parsed);
                   });
                 }}
               />

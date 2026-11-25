@@ -216,7 +216,7 @@ export function App() {
   const handleRegister = (data: {
     name: string;
     email: string;
-    password: string;
+    passwordHash: string;
     organization: string;
     role: 'member' | 'teacher';
   }) => {
@@ -226,7 +226,7 @@ export function App() {
     const newMember: MemberAccount = {
       id: `mem-${Date.now()}`,
       email: data.email,
-      passwordHash: data.password,
+      passwordHash: data.passwordHash,
       name: data.name,
       organization: data.organization,
       role: data.role,
@@ -737,8 +737,8 @@ export function App() {
             ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={lang === 'fr' ? 'Rechercher client, réservation, chambre...' : 'Search guests, bookings, rooms...'}
-            className="w-full pl-9 pr-14 py-1.5 rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-indigo-500 text-xs focus:outline-none transition"
+            placeholder={lang === 'fr' ? 'Rechercher client, réf...' : 'Search guest, ref...'}
+            className="w-full pl-9 pr-16 py-1.5 rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-indigo-500 text-xs focus:outline-none transition"
           />
           <kbd className="absolute right-2.5 top-1.5 px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[10px] font-semibold text-slate-400">
             Ctrl+K
@@ -828,10 +828,10 @@ export function App() {
       </header>
 
       <div className="flex-1 flex min-h-0 relative">
-        {/* MEWS-STYLE COLLAPSIBLE LEFT NAVIGATION RAIL (Larger font text-sm) */}
+        {/* MEWS-STYLE COLLAPSIBLE LEFT NAVIGATION RAIL (Sticky + Larger font text-sm) */}
         <aside
           className={`no-print ${
-            mobileMenuOpen ? 'fixed inset-y-16 left-0 z-40 flex shadow-2xl w-68' : 'hidden lg:flex'
+            mobileMenuOpen ? 'fixed inset-y-16 left-0 z-40 flex shadow-2xl w-68' : 'hidden lg:flex lg:sticky lg:top-16 lg:h-[calc(100vh-4rem)]'
           } ${sidebarCollapsed ? 'lg:w-18' : 'lg:w-68'} bg-slate-900 text-slate-200 flex-col shrink-0 border-r border-slate-800 transition-all`}
         >
           <div className="hidden lg:flex justify-end px-3 pt-2.5">
