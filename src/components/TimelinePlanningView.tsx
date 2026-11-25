@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Plus, UserPlus, Calendar, Users, Sparkles } from 'lucide-react';
+import {
+  Plus,
+  UserPlus,
+  Calendar,
+  Users,
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  ChevronUp,
+  AlertCircle,
+} from 'lucide-react';
 import type {
   Guest,
   HotelProject,
@@ -16,9 +27,11 @@ interface TimelinePlanningViewProps {
   onSelectReservation: (resId: string) => void;
   onCreateGuest: (guest: Omit<Guest, 'id' | 'loyaltyPoints'>) => Guest;
   onCreateReservation: (res: Omit<Reservation, 'id' | 'reference'>) => void;
+  onMoveReservationRoom: (resId: string, newRoomId: string) => void;
 }
 
 type Density = 'compact' | 'default' | 'comfortable';
+type Horizon = 7 | 14 | 30;
 
 export const TimelinePlanningView: React.FC<TimelinePlanningViewProps> = ({
   project,
@@ -26,9 +39,15 @@ export const TimelinePlanningView: React.FC<TimelinePlanningViewProps> = ({
   onSelectReservation,
   onCreateGuest,
   onCreateReservation,
+  onMoveReservationRoom,
 }) => {
   const [density, setDensity] = useState<Density>('default');
-  const [filterType, setFilterType] = useState<string>('ALL');
+  const [horizon, setHorizon] = useState<Horizon>(14);
+  const [startOffset, setStartOffset] = useState<number>(-1);
+  const [collapsedTypes, setCollapsedTypes] = useState<Record<string, boolean>>({});
+  const [draggedResId, setDraggedResId] = useState<string | null>(null);
+  const [dragOverRoomId, setDragOverRoomId] = useState<string | null>(null);
+
   const [showNewRes, setShowNewRes] = useState(false);
   const [showNewGuest, setShowNewGuest] = useState(false);
 
@@ -58,9 +77,10 @@ export const TimelinePlanningView: React.FC<TimelinePlanningViewProps> = ({
   const [rGroup, setRGroup] = useState('');
   const [rNotes, setRNotes] = useState('');
 
-  const days = Array.from({ length: 10 }, (_, idx) => addDays(project.simulatedDate, idx - 1));
+  const days = Array.from({ length: horizon }, (_, idx) =>
+    addDays(project.simulatedDate, startOffset + idx)
+  );
   const roomTypes = Array.from(new Set(project.rooms.map((r) => r.type)));
-  const visibleRooms = project.rooms.filter((r) => filterType === 'ALL' || r.type === filterType);
 
   const rowHeight = density === 'compact' ? 'h-9' : density === 'comfortable' ? 'h-14' : 'h-11';
 
@@ -128,7 +148,7 @@ export const TimelinePlanningView: React.FC<TimelinePlanningViewProps> = ({
 
     onCreateReservation({
       guestId: rGuestId || project.guests[0]?.id,
-      roomId: rStatus === 'waitlist' ? undefined : chosenRoom?.id,
+      roomId: rStatus === 'waitlist' ? undefined : rRoomId ? chosenRoom?.id : chosenRoom?.id,
       roomType: rRoomType,
       checkIn: rCheckIn,
       checkOut: rCheckOut,
@@ -149,28 +169,80 @@ export const TimelinePlanningView: React.FC<TimelinePlanningViewProps> = ({
     setRNotes('');
   };
 
+  const unassigned = project.reservations.filter(
+    (r) => !r.roomId && (r.status === 'confirmed' || r.status === 'checked_in')
+  );
   const waitlist = project.reservations.filter((r) => r.status === 'waitlist');
+
+  // Availability count per roomType per day
+  const getCategoryAvailable = (type: RoomType, dateStr: string) => {
+    const catRooms = project.rooms.filter((r) => r.type === type && r.status !== 'out_of_order');
+    const busyCount = project.reservations.filter(
+      (r) =>
+        r.roomType === type &&
+        r.status !== 'cancelled' &&
+        r.status !== 'no_show' &&
+        r.status !== 'waitlist' &&
+        r.checkIn <= dateStr &&
+        r.checkOut > dateStr
+    ).length;
+    return Math.max(0, catRooms.length - busyCount);
+  };
 
   return (
     <div className="space-y-4">
       {/* Mews-Style Timeline Toolbar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Calendar className="w-4 h-4 text-indigo-600" />
-            {lang === 'fr' ? 'Timeline & Room Rack (Style Mews)' : 'Mews-Style Timeline & Room Rack'}
+            {lang === 'fr' ? 'Timeline (Style Mews)' : 'Mews Timeline'}
           </h2>
-          <select
-            value={filterType}
-            onChange={(e) => setFilterType(e.target.value)}
-            className="px-2.5 py-1.5 rounded-lg border border-slate-200 text-xs font-medium bg-slate-50"
-          >
-            <option value="ALL">{lang === 'fr' ? 'Toutes catégories' : 'All categories'}</option>
-            {roomTypes.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
 
+          {/* Date Navigation */}
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setStartOffset((s) => s - 7)}
+              className="p-1.5 rounded-md hover:bg-white text-slate-700"
+              title="-7 jours"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setStartOffset(-1)}
+              className="px-2.5 py-1 rounded-md hover:bg-white font-semibold text-slate-800"
+            >
+              {lang === 'fr' ? "Aujourd'hui" : 'Today'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStartOffset((s) => s + 7)}
+              className="p-1.5 rounded-md hover:bg-white text-slate-700"
+              title="+7 jours"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Horizon Selector */}
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 text-xs">
+            {([7, 14, 30] as Horizon[]).map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => setHorizon(h)}
+                className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                  horizon === h ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
+                }`}
+              >
+                {h}J
+              </button>
+            ))}
+          </div>
+
+          {/* Density Selector */}
           <div className="hidden sm:flex items-center bg-slate-100 rounded-lg p-0.5 text-xs">
             {(['compact', 'default', 'comfortable'] as Density[]).map((d) => (
               <button
@@ -194,7 +266,7 @@ export const TimelinePlanningView: React.FC<TimelinePlanningViewProps> = ({
             className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5"
           >
             <UserPlus className="w-3.5 h-3.5" />
-            {lang === 'fr' ? '+ Nouveau Client' : '+ New Guest'}
+            {lang === 'fr' ? '+ Client' : '+ Guest'}
           </button>
           <button
             type="button"
@@ -207,105 +279,206 @@ export const TimelinePlanningView: React.FC<TimelinePlanningViewProps> = ({
         </div>
       </div>
 
+      {/* Unassigned Reservations Strip (Mews style) */}
+      {unassigned.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-bold text-amber-900 flex items-center gap-1">
+            <AlertCircle className="w-4 h-4 text-amber-600" />
+            Réservations non assignées ({unassigned.length}) — Glissez ou cliquez pour attribuer :
+          </span>
+          {unassigned.map((r) => (
+            <button
+              key={r.id}
+              draggable
+              onDragStart={() => setDraggedResId(r.id)}
+              onClick={() => onSelectReservation(r.id)}
+              className="px-2.5 py-1 rounded-lg bg-white border border-amber-300 font-semibold text-amber-900 hover:bg-amber-100 cursor-grab"
+            >
+              {getGuestName(r.guestId)} ({r.roomType})
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Legend */}
-      <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-600 px-1">
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Libre / Inspectée</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Occupée / Arrivée du jour</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> À nettoyer</span>
-        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Hors service</span>
-        <span className="flex items-center gap-1.5"><span className="w-3 h-2.5 rounded bg-indigo-600" /> Séjour en cours (In-house)</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-600 px-1">
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> Libre / Inspectée</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500" /> Occupée / Arrivée du jour</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500" /> À nettoyer</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500" /> Hors service</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-2.5 rounded bg-indigo-600" /> Séjour en cours</span>
+        </div>
+        <span className="text-slate-400 italic">Astuce Mews : glissez-déposez une barre de réservation pour changer de chambre</span>
       </div>
 
-      {/* Timeline Grid */}
+      {/* Collapsible Category Timeline Grid */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-x-auto">
-        <div className="min-w-[880px]">
+        <div style={{ minWidth: horizon === 30 ? '1450px' : horizon === 14 ? '1040px' : '820px' }}>
           {/* Header Row */}
           <div className="grid grid-cols-12 border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-600">
             <div className="col-span-2 px-4 py-2.5 border-r border-slate-200">
-              {lang === 'fr' ? 'Chambre / Catégorie' : 'Space / Category'}
+              {lang === 'fr' ? 'Catégorie / Chambre' : 'Category / Space'}
             </div>
-            <div className="col-span-10 grid grid-cols-10">
+            <div
+              className="col-span-10 grid"
+              style={{ gridTemplateColumns: `repeat(${horizon}, minmax(0, 1fr))` }}
+            >
               {days.map((d) => {
                 const isToday = d === project.simulatedDate;
                 return (
                   <div
                     key={d}
-                    className={`py-2.5 text-center border-r border-slate-100 last:border-r-0 ${
+                    className={`py-2 text-center border-r border-slate-100 last:border-r-0 ${
                       isToday ? 'bg-indigo-50 text-indigo-700 font-bold' : ''
                     }`}
                   >
-                    <div>{d.slice(5)}</div>
-                    {isToday && <div className="text-[9px] uppercase tracking-wider">Aujourd’hui</div>}
+                    <div className="text-[11px]">{d.slice(5)}</div>
+                    {isToday && <div className="text-[9px] uppercase tracking-wider">Auj.</div>}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Room Rows */}
-          <div className="divide-y divide-slate-100">
-            {visibleRooms.map((room) => {
-              const roomRes = project.reservations.filter(
-                (r) => r.roomId === room.id && r.status !== 'cancelled' && r.status !== 'no_show'
-              );
-              return (
-                <div key={room.id} className={`grid grid-cols-12 ${rowHeight} items-center hover:bg-slate-50/70`}>
-                  <div className="col-span-2 px-4 h-full border-r border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={`w-2.5 h-2.5 rounded-full ${statusDot(room.status)}`} />
-                      <span className="font-bold text-slate-800 text-xs">{room.number}</span>
-                    </div>
-                    <span className="text-[11px] text-slate-500 truncate max-w-[90px]">{room.type}</span>
-                  </div>
-
-                  <div className="col-span-10 grid grid-cols-10 h-full relative">
-                    {days.map((d) => (
-                      <div
-                        key={d}
-                        className={`h-full border-r border-slate-100 last:border-r-0 ${
-                          d === project.simulatedDate ? 'bg-indigo-50/30' : ''
-                        }`}
-                      />
-                    ))}
-
-                    {roomRes.map((res) => {
-                      const startIdx = days.findIndex((d) => d >= res.checkIn);
-                      const effectiveStart = res.checkIn < days[0] ? 0 : startIdx;
-                      if (effectiveStart === -1 || res.checkOut <= days[0]) return null;
-
-                      const nights = diffNights(
-                        res.checkIn < days[0] ? days[0] : res.checkIn,
-                        res.checkOut > addDays(days[days.length - 1], 1)
-                          ? addDays(days[days.length - 1], 1)
-                          : res.checkOut
-                      );
-                      const spanCols = Math.min(10 - effectiveStart, Math.max(1, nights));
-                      const leftPct = (effectiveStart / 10) * 100;
-                      const widthPct = (spanCols / 10) * 100;
-
+          {/* Grouped by RoomType */}
+          {roomTypes.map((type) => {
+            const typeRooms = project.rooms.filter((r) => r.type === type);
+            const isCollapsed = Boolean(collapsedTypes[type]);
+            return (
+              <div key={type} className="border-b border-slate-200 last:border-b-0">
+                {/* Category Summary Row with Daily Availability Counters */}
+                <div className="grid grid-cols-12 bg-slate-100/80 border-b border-slate-200 text-xs font-bold text-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setCollapsedTypes({ ...collapsedTypes, [type]: !isCollapsed })}
+                    className="col-span-2 px-3 py-2 border-r border-slate-200 flex items-center justify-between hover:bg-slate-200/60 text-left"
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {isCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                      {type}
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500">{typeRooms.length} ch.</span>
+                  </button>
+                  <div
+                    className="col-span-10 grid"
+                    style={{ gridTemplateColumns: `repeat(${horizon}, minmax(0, 1fr))` }}
+                  >
+                    {days.map((d) => {
+                      const avail = getCategoryAvailable(type, d);
                       return (
-                        <button
-                          key={res.id}
-                          type="button"
-                          onClick={() => onSelectReservation(res.id)}
-                          style={{ left: `calc(${leftPct}% + 2px)`, width: `calc(${widthPct}% - 4px)` }}
-                          className={`absolute top-1.5 bottom-1.5 rounded-md border px-2 text-left text-[11px] font-semibold truncate shadow-xs hover:brightness-110 transition flex items-center justify-between ${resBarColor(
-                            res
-                          )}`}
-                          title={`${getGuestName(res.guestId)} (${res.checkIn} → ${res.checkOut})`}
+                        <div
+                          key={d}
+                          className={`py-2 text-center text-[11px] border-r border-slate-200/70 last:border-r-0 tabular-nums ${
+                            avail === 0 ? 'text-red-600 bg-red-50/60' : 'text-emerald-700'
+                          }`}
+                          title={`${avail} disponible(s)`}
                         >
-                          <span className="truncate">{getGuestName(res.guestId)}</span>
-                          {res.groupName && (
-                            <span className="ml-1 px-1 rounded bg-black/20 text-[9px] shrink-0">GRP</span>
-                          )}
-                        </button>
+                          {avail}
+                        </div>
                       );
                     })}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+
+                {/* Individual Room Rows */}
+                {!isCollapsed && (
+                  <div className="divide-y divide-slate-100">
+                    {typeRooms.map((room) => {
+                      const roomRes = project.reservations.filter(
+                        (r) => r.roomId === room.id && r.status !== 'cancelled' && r.status !== 'no_show'
+                      );
+                      const isDropTarget = dragOverRoomId === room.id;
+
+                      return (
+                        <div
+                          key={room.id}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            setDragOverRoomId(room.id);
+                          }}
+                          onDragLeave={() => setDragOverRoomId(null)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverRoomId(null);
+                            if (draggedResId && room.status !== 'out_of_order') {
+                              onMoveReservationRoom(draggedResId, room.id);
+                            }
+                            setDraggedResId(null);
+                          }}
+                          className={`grid grid-cols-12 ${rowHeight} items-center transition ${
+                            isDropTarget ? 'bg-indigo-100/70 ring-1 ring-inset ring-indigo-500' : 'hover:bg-slate-50/70'
+                          }`}
+                        >
+                          <div className="col-span-2 px-4 h-full border-r border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full ${statusDot(room.status)}`} />
+                              <span className="font-bold text-slate-800 text-xs">{room.number}</span>
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {room.maxGuests ?? 2}p • {formatMoney(room.baseRate, project.config.currency)}
+                            </span>
+                          </div>
+
+                          <div
+                            className="col-span-10 grid h-full relative"
+                            style={{ gridTemplateColumns: `repeat(${horizon}, minmax(0, 1fr))` }}
+                          >
+                            {days.map((d) => (
+                              <div
+                                key={d}
+                                className={`h-full border-r border-slate-100 last:border-r-0 ${
+                                  d === project.simulatedDate ? 'bg-indigo-50/30' : ''
+                                }`}
+                              />
+                            ))}
+
+                            {roomRes.map((res) => {
+                              const firstDay = days[0];
+                              const lastDay = days[days.length - 1];
+                              if (res.checkOut <= firstDay || res.checkIn > lastDay) return null;
+
+                              const startIdx = days.findIndex((d) => d >= res.checkIn);
+                              const effectiveStart = res.checkIn < firstDay ? 0 : startIdx;
+                              if (effectiveStart === -1) return null;
+
+                              const nights = diffNights(
+                                res.checkIn < firstDay ? firstDay : res.checkIn,
+                                res.checkOut > addDays(lastDay, 1) ? addDays(lastDay, 1) : res.checkOut
+                              );
+                              const spanCols = Math.min(horizon - effectiveStart, Math.max(1, nights));
+                              const leftPct = (effectiveStart / horizon) * 100;
+                              const widthPct = (spanCols / horizon) * 100;
+
+                              return (
+                                <button
+                                  key={res.id}
+                                  type="button"
+                                  draggable
+                                  onDragStart={() => setDraggedResId(res.id)}
+                                  onClick={() => onSelectReservation(res.id)}
+                                  style={{ left: `calc(${leftPct}% + 2px)`, width: `calc(${widthPct}% - 4px)` }}
+                                  className={`absolute top-1.5 bottom-1.5 rounded-md border px-2 text-left text-[11px] font-semibold truncate shadow-xs hover:brightness-110 transition flex items-center justify-between cursor-grab active:cursor-grabbing ${resBarColor(
+                                    res
+                                  )}`}
+                                  title={`${getGuestName(res.guestId)} (${res.checkIn} → ${res.checkOut}) — Glisser pour déplacer`}
+                                >
+                                  <span className="truncate">{getGuestName(res.guestId)}</span>
+                                  {res.groupName && (
+                                    <span className="ml-1 px-1 rounded bg-black/20 text-[9px] shrink-0">GRP</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 

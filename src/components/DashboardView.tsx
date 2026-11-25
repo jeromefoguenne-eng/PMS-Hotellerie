@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import type { HotelProject, Language } from '../types/pms';
 import { formatMoney } from '../lib/format';
+import { computeProjectsAnalytics } from '../lib/analytics';
+import { OccupancyLineChart } from './AnalyticsCharts';
 
 interface DashboardViewProps {
   project: HotelProject;
@@ -43,6 +45,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const dirtyRooms = rooms.filter((r) => r.status === 'dirty' || r.status === 'cleaning');
   const lowStock = catalog.filter((c) => c.stockQty <= c.minThreshold);
   const openTickets = maintenanceTickets.filter((t) => t.status !== 'resolved');
+
+  const dayAnalytics = computeProjectsAnalytics([project], 'day').series.slice(0, 7);
 
   const getGuestName = (guestId: string) => {
     const g = project.guests.find((x) => x.id === guestId);
@@ -293,6 +297,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 7-Day Occupancy Forecast Chart (Mews Home style) */}
+      <OccupancyLineChart
+        title={lang === 'fr' ? 'Prévision d’occupation sur 7 jours (%)' : '7-Day Occupancy Forecast (%)'}
+        subtitle={lang === 'fr' ? 'Vue rapide style Mews Operations' : 'Mews Operations quick forecast'}
+        data={dayAnalytics.map((d) => ({
+          label: d.label,
+          rate: d.occupancyRate,
+          detail: `${d.occupiedRoomNights}/${d.capacityRoomNights}`,
+        }))}
+      />
     </div>
   );
 };

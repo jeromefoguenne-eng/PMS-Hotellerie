@@ -34,7 +34,8 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
   onToggleItemPayer,
   onAddPayment,
 }) => {
-  const [tab, setTab] = useState<'stay' | 'folio' | 'police'>('stay');
+  const [tab, setTab] = useState<'stay' | 'folio' | 'invoice' | 'police'>('stay');
+  const [invoiceScope, setInvoiceScope] = useState<'all' | 'guest' | 'company'>('all');
   const [extraDesc, setExtraDesc] = useState('Consommation Bar');
   const [extraCat, setExtraCat] = useState<FolioCategory>('bar');
   const [extraPrice, setExtraPrice] = useState(4500);
@@ -99,13 +100,19 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
             onClick={() => setTab('folio')}
             className={`py-3 border-b-2 ${tab === 'folio' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}
           >
-            {lang === 'fr' ? 'Folio & Facturation Scindée' : 'Folio & Split Billing'}
+            {lang === 'fr' ? 'Folio' : 'Folio'}
+          </button>
+          <button
+            onClick={() => setTab('invoice')}
+            className={`py-3 border-b-2 ${tab === 'invoice' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}
+          >
+            {lang === 'fr' ? 'Facture (PDF)' : 'Invoice (PDF)'}
           </button>
           <button
             onClick={() => setTab('police')}
             className={`py-3 border-b-2 ${tab === 'police' ? 'border-indigo-600 text-indigo-600' : 'border-transparent text-slate-500'}`}
           >
-            {lang === 'fr' ? 'Fiche de Police' : 'Police Registration'}
+            {lang === 'fr' ? 'Fiche de Police' : 'Police Form'}
           </button>
         </div>
 
@@ -354,6 +361,112 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
               </div>
             </>
           )}
+
+          {tab === 'invoice' && (() => {
+            const scopedItems = (folio?.items || []).filter(
+              (i) => invoiceScope === 'all' || i.payer === invoiceScope
+            );
+            const scopedPayments = (folio?.payments || []).filter(
+              (p) => invoiceScope === 'all' || p.payer === invoiceScope
+            );
+            const ttc = scopedItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+            const vatRate = project.config.billing.vatRate / 100;
+            const ht = Math.round(ttc / (1 + vatRate));
+            const tva = ttc - ht;
+            const paid = scopedPayments.reduce((s, p) => s + p.amount, 0);
+            const due = ttc - paid;
+
+            return (
+              <div className="space-y-4 text-xs">
+                <div className="no-print flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex bg-slate-100 p-0.5 rounded-lg">
+                    {[
+                      { id: 'all', label: 'Facture Globale' },
+                      { id: 'guest', label: 'Facture Client' },
+                      { id: 'company', label: 'Facture Entreprise' },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setInvoiceScope(s.id as 'all' | 'guest' | 'company')}
+                        className={`px-2.5 py-1 rounded-md font-semibold ${
+                          invoiceScope === s.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-3 py-1.5 rounded-lg bg-slate-900 text-white font-semibold flex items-center gap-1.5"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Imprimer / PDF
+                  </button>
+                </div>
+
+                <div className="border rounded-xl p-5 bg-white space-y-4">
+                  <div className="flex justify-between border-b pb-3">
+                    <div>
+                      <div className="font-bold text-base text-slate-900">{project.config.hotelName}</div>
+                      <div className="text-slate-500">{project.config.city}, {project.config.country}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-indigo-700 uppercase">
+                        FACTURE {invoiceScope === 'company' ? 'ENTREPRISE' : invoiceScope === 'guest' ? 'CLIENT' : ''}
+                      </div>
+                      <div className="text-slate-500">Réf : {res.reference} • Date : {project.simulatedDate}</div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-slate-700">
+                    <div>
+                      <strong>Client :</strong> {guest?.firstName} {guest?.lastName}
+                      {guest?.company && <div><strong>Société :</strong> {guest.company}</div>}
+                    </div>
+                    <div className="text-right">
+                      <div><strong>Séjour :</strong> {res.checkIn} → {res.checkOut}</div>
+                      <div><strong>Chambre :</strong> {room?.number || res.roomType}</div>
+                    </div>
+                  </div>
+
+                  <table className="w-full border-t border-b">
+                    <thead className="bg-slate-50 text-slate-500 border-b">
+                      <tr>
+                        <th className="text-left py-2 px-2">Désignation</th>
+                        <th className="text-center py-2 px-2">Qté</th>
+                        <th className="text-right py-2 px-2">Total TTC</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {scopedItems.map((i) => (
+                        <tr key={i.id}>
+                          <td className="py-2 px-2">{i.description}</td>
+                          <td className="py-2 px-2 text-center">{i.quantity}</td>
+                          <td className="py-2 px-2 text-right tabular-nums">
+                            {formatMoney(i.quantity * i.unitPrice, project.config.currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div className="flex flex-col items-end space-y-1 pt-2">
+                    <div>Total HT : <strong>{formatMoney(ht, project.config.currency)}</strong></div>
+                    <div>TVA ({project.config.billing.vatRate}%) : <strong>{formatMoney(tva, project.config.currency)}</strong></div>
+                    <div className="text-sm font-bold text-slate-900">
+                      Total TTC : {formatMoney(ttc, project.config.currency)}
+                    </div>
+                    <div className="text-emerald-700">Déjà réglé : {formatMoney(paid, project.config.currency)}</div>
+                    <div className="text-sm font-bold text-indigo-700">
+                      Net à payer : {formatMoney(due, project.config.currency)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {tab === 'police' && (
             <div className="border-2 border-dashed border-slate-300 rounded-xl p-5 space-y-3 text-xs">

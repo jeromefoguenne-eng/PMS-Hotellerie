@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   LayoutDashboard,
   CalendarRange,
@@ -24,6 +24,9 @@ import {
   CheckCircle2,
   Cloud,
   Users,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Smartphone,
 } from 'lucide-react';
 import type {
   CatalogItem,
@@ -70,6 +73,7 @@ import { AdminSpaceView } from './components/AdminSpaceView';
 import { MemberStatsView } from './components/MemberStatsView';
 import { AuditLogTeamView } from './components/AuditLogTeamView';
 import { GuestCrmView } from './components/GuestCrmView';
+import { GuestPortalModal } from './components/GuestPortalModal';
 
 export function App() {
   const [lang, setLang] = useState<Language>('fr');
@@ -80,10 +84,24 @@ export function App() {
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showGuestPortal, setShowGuestPortal] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [lastSavedTime, setLastSavedTime] = useState<string>(() =>
     new Date().toTimeString().slice(0, 8)
   );
   const [cloudSynced, setCloudSynced] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const t = translations[lang];
 
@@ -615,26 +633,50 @@ export function App() {
 
   const activeScenario = PEDAGOGICAL_SCENARIOS.find((s) => s.id === activeProject.pedagogy.activeScenarioId);
 
-  // Mews Operations exact navigation order
-  const navItems = [
-    { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
-    { id: 'planning', label: 'Timeline (Planning)', icon: CalendarRange },
-    { id: 'frontDesk', label: 'Reservations & Front Desk', icon: LogIn },
-    { id: 'crm', label: 'CRM Clients & Profils', icon: Users },
-    ...(activeProject.config.modules.housekeepingMode !== 'disabled'
-      ? [{ id: 'housekeeping', label: 'Housekeeping & Maintenance', icon: Sparkles }]
-      : []),
-    { id: 'billing', label: 'Billing & Accounting', icon: Receipt },
-    ...(activeProject.config.modules.inventory || activeProject.config.modules.barAndFood || activeProject.config.modules.roomService
-      ? [{ id: 'inventory', label: 'POS & Inventory', icon: Package }]
-      : []),
-    { id: 'memberStats', label: t.memberStats, icon: BarChart2 },
-    { id: 'reports', label: t.reports, icon: BarChart3 },
-    { id: 'configurator', label: 'Marketplace / Modules', icon: Sliders },
-    { id: 'projects', label: t.projects, icon: FolderKanban },
-    { id: 'auditLog', label: 'Historique Actions', icon: History },
-    { id: 'pedagogy', label: t.pedagogy, icon: GraduationCap },
-    ...(currentMember.role === 'admin' ? [{ id: 'admin', label: t.adminSpace, icon: ShieldAlert }] : []),
+  const navGroups: { title: string; items: { id: string; label: string; icon: typeof LayoutDashboard }[] }[] = [
+    {
+      title: 'Opérations',
+      items: [
+        { id: 'dashboard', label: t.dashboard, icon: LayoutDashboard },
+        { id: 'planning', label: 'Timeline (Planning)', icon: CalendarRange },
+        { id: 'frontDesk', label: 'Reservations & Front Desk', icon: LogIn },
+        { id: 'crm', label: 'CRM Clients & Profils', icon: Users },
+        ...(activeProject.config.modules.housekeepingMode !== 'disabled'
+          ? [{ id: 'housekeeping', label: 'Housekeeping & Maintenance', icon: Sparkles }]
+          : []),
+      ],
+    },
+    {
+      title: 'Finance & POS',
+      items: [
+        { id: 'billing', label: 'Billing & Accounting', icon: Receipt },
+        ...(activeProject.config.modules.inventory || activeProject.config.modules.barAndFood || activeProject.config.modules.roomService
+          ? [{ id: 'inventory', label: 'POS & Inventory', icon: Package }]
+          : []),
+      ],
+    },
+    {
+      title: 'Pilotage',
+      items: [
+        { id: 'memberStats', label: t.memberStats, icon: BarChart2 },
+        { id: 'reports', label: t.reports, icon: BarChart3 },
+      ],
+    },
+    {
+      title: 'Configuration & Équipe',
+      items: [
+        { id: 'configurator', label: 'Marketplace / Modules', icon: Sliders },
+        { id: 'projects', label: t.projects, icon: FolderKanban },
+        { id: 'auditLog', label: 'Historique Actions', icon: History },
+      ],
+    },
+    {
+      title: 'Formation',
+      items: [
+        { id: 'pedagogy', label: t.pedagogy, icon: GraduationCap },
+        ...(currentMember.role === 'admin' ? [{ id: 'admin', label: t.adminSpace, icon: ShieldAlert }] : []),
+      ],
+    },
   ];
 
   const searchMatches = searchQuery.trim()
@@ -682,15 +724,19 @@ export function App() {
           </select>
         </div>
 
-        {/* Center: Mews Global Commander Search */}
+        {/* Center: Mews Global Commander Search (Ctrl+K) */}
         <div className="relative flex-1 max-w-md hidden md:block">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2" />
           <input
+            ref={searchInputRef}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={lang === 'fr' ? 'Rechercher client, réservation, chambre...' : 'Search guests, bookings, rooms...'}
-            className="w-full pl-9 pr-3 py-1.5 rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-indigo-500 text-xs focus:outline-none transition"
+            className="w-full pl-9 pr-14 py-1.5 rounded-lg bg-slate-100 border border-transparent focus:bg-white focus:border-indigo-500 text-xs focus:outline-none transition"
           />
+          <kbd className="absolute right-2.5 top-1.5 px-1.5 py-0.5 rounded bg-white border border-slate-200 text-[10px] font-semibold text-slate-400">
+            Ctrl+K
+          </kbd>
           {searchMatches.length > 0 && (
             <div className="absolute left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 divide-y text-xs">
               {searchMatches.slice(0, 6).map((r) => {
@@ -715,8 +761,18 @@ export function App() {
           )}
         </div>
 
-        {/* Right: Quick Create, Auto-Save, Clock, Lang, Profile */}
+        {/* Right: Quick Create, Guest Portal, Auto-Save, Clock, Lang, Profile */}
         <div className="flex items-center gap-2 text-xs">
+          {activeProject.config.modules.onlineCheckIn && (
+            <button
+              onClick={() => setShowGuestPortal(true)}
+              className="hidden sm:flex px-2.5 py-1.5 rounded-lg border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold items-center gap-1"
+              title="Simuler le portail Client Online Check-in (Mews Guest Portal)"
+            >
+              <Smartphone className="w-3.5 h-3.5" />
+              <span className="hidden xl:inline">Guest Portal</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('planning')}
             className="px-2.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1 shadow-2xs"
@@ -766,45 +822,69 @@ export function App() {
       </header>
 
       <div className="flex-1 flex min-h-0 relative">
-        {/* MEWS-STYLE LEFT NAVIGATION RAIL */}
+        {/* MEWS-STYLE COLLAPSIBLE LEFT NAVIGATION RAIL (Larger font text-sm) */}
         <aside
           className={`no-print ${
-            mobileMenuOpen ? 'fixed inset-y-16 left-0 z-40 flex shadow-2xl' : 'hidden lg:flex'
-          } w-64 lg:w-60 bg-slate-900 text-slate-300 flex-col shrink-0 border-r border-slate-800`}
+            mobileMenuOpen ? 'fixed inset-y-16 left-0 z-40 flex shadow-2xl w-68' : 'hidden lg:flex'
+          } ${sidebarCollapsed ? 'lg:w-18' : 'lg:w-68'} bg-slate-900 text-slate-200 flex-col shrink-0 border-r border-slate-800 transition-all`}
         >
-          <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const active = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    setActiveTab(item.id);
-                    setMobileMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition ${
-                    active
-                      ? 'bg-indigo-600 text-white shadow-xs'
-                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            })}
+          <div className="hidden lg:flex justify-end px-3 pt-2.5">
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              title={sidebarCollapsed ? 'Déplier le menu' : 'Replier en icônes'}
+            >
+              {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+            </button>
+          </div>
+
+          <nav className="flex-1 px-3 py-2 space-y-4 overflow-y-auto">
+            {navGroups.map((group) => (
+              <div key={group.title} className="space-y-1">
+                {!sidebarCollapsed && (
+                  <div className="px-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    {group.title}
+                  </div>
+                )}
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const active = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => {
+                        setActiveTab(item.id);
+                        setMobileMenuOpen(false);
+                      }}
+                      title={item.label}
+                      className={`w-full flex items-center ${
+                        sidebarCollapsed ? 'justify-center px-2' : 'gap-3 px-3'
+                      } py-2.5 rounded-lg text-sm font-medium transition ${
+                        active
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Icon className="w-5 h-5 shrink-0" />
+                      {!sidebarCollapsed && <span className="truncate">{item.label}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
           </nav>
 
-          <div className="p-3.5 border-t border-slate-800 text-[11px] space-y-1 bg-slate-950/40">
-            <div className="font-bold text-white truncate">{currentMember.name}</div>
-            <div className="text-slate-400 truncate">{currentMember.organization}</div>
-            <div className="text-amber-400 font-semibold pt-0.5">
-              {activeProject.pedagogy.mode === 'live'
-                ? 'Mode Hôtel Réel'
-                : `Mode ${activeProject.pedagogy.mode} • ${activeProject.pedagogy.score} pts`}
+          {!sidebarCollapsed && (
+            <div className="p-3.5 border-t border-slate-800 text-xs space-y-1 bg-slate-950/40">
+              <div className="font-bold text-white truncate">{currentMember.name}</div>
+              <div className="text-slate-400 truncate">{currentMember.organization}</div>
+              <div className="text-emerald-400 font-semibold pt-0.5">
+                {activeProject.pedagogy.mode === 'live'
+                  ? 'Mode Hôtel Réel'
+                  : `Mode ${activeProject.pedagogy.mode} • ${activeProject.pedagogy.score} pts`}
+              </div>
             </div>
-          </div>
+          )}
         </aside>
 
         {/* Main Workspace */}
@@ -840,6 +920,22 @@ export function App() {
                 onSelectReservation={setSelectedResId}
                 onCreateGuest={handleCreateGuest}
                 onCreateReservation={handleCreateReservation}
+                onMoveReservationRoom={(resId, newRoomId) => {
+                  const res = activeProject.reservations.find((r) => r.id === resId);
+                  const rm = activeProject.rooms.find((r) => r.id === newRoomId);
+                  updateActiveProject((p) => ({
+                    ...p,
+                    reservations: p.reservations.map((r) =>
+                      r.id === resId ? { ...r, roomId: newRoomId } : r
+                    ),
+                    actionLog: logAction(
+                      p,
+                      'reservation',
+                      `Déplacement Timeline (${res?.reference || resId})`,
+                      `Assignée à la chambre ${rm?.number || newRoomId}`
+                    ),
+                  }));
+                }}
               />
             )}
             {(activeTab === 'frontDesk' || activeTab === 'billing') && (
@@ -1008,6 +1104,32 @@ export function App() {
           );
         })}
       </nav>
+
+      {/* Mews Guest Portal / Online Check-in Simulator */}
+      {showGuestPortal && (
+        <GuestPortalModal
+          project={activeProject}
+          onClose={() => setShowGuestPortal(false)}
+          onCompleteOnlineCheckIn={(resId, hkChoice, idNum) => {
+            const res = activeProject.reservations.find((r) => r.id === resId);
+            updateActiveProject((p) => ({
+              ...p,
+              reservations: p.reservations.map((r) =>
+                r.id === resId ? { ...r, housekeepingChoice: hkChoice } : r
+              ),
+              guests: p.guests.map((g) =>
+                g.id === res?.guestId && idNum ? { ...g, idNumber: idNum } : g
+              ),
+              actionLog: logAction(
+                p,
+                'front_desk',
+                `Self Check-in en ligne (${res?.reference || resId})`,
+                `Fiche signée • Ménage : ${hkChoice}`
+              ),
+            }));
+          }}
+        />
+      )}
 
       {/* Mews Smart Detail Slide-Out Drawer */}
       {selectedResId && (
