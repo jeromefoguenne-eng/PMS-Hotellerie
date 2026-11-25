@@ -855,6 +855,7 @@ export function App() {
               <GuestCrmView
                 project={activeProject}
                 lang={lang}
+                actorName={currentMember.name}
                 onCreateGuest={handleCreateGuest}
                 onUpdateGuest={(guestId, patch) =>
                   updateActiveProject((p) => ({

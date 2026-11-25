@@ -103,6 +103,15 @@ export interface Room {
   notes?: string;
 }
 
+export interface GuestExperience {
+  id: string;
+  date: string;
+  type: 'positive' | 'complaint' | 'neutral';
+  summary: string;
+  resolution?: string;
+  recordedBy: string;
+}
+
 export interface Guest {
   id: string;
   firstName: string;
@@ -111,10 +120,17 @@ export interface Guest {
   phone: string;
   nationality: string;
   idNumber: string;
+  birthDate?: string;
+  address?: string;
+  cityCountry?: string;
+  company?: string;
+  preferredLanguage?: string;
+  dietaryRestrictions?: string;
   vipStatus: 'Standard' | 'Silver' | 'Gold' | 'Corporate';
   preferences: string;
   notes: string;
   loyaltyPoints: number;
+  experiences?: GuestExperience[];
 }
 
 export interface Reservation {
