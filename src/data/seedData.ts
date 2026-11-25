@@ -33,6 +33,8 @@ export function buildRooms(totalRooms: number, floors: number, currency: Currenc
     const number = `${floor}${indexOnFloor.toString().padStart(2, '0')}`;
     const type = types[i % types.length];
     const rate = currency === 'FCFA' ? baseRatesFCFA[type] : baseRatesEUR[type];
+    const isSuiteOrDeluxe = type === 'Suite' || type === 'Deluxe';
+    const isFamily = type === 'Familiale';
 
     rooms.push({
       id: `room-${number}`,
@@ -40,6 +42,12 @@ export function buildRooms(totalRooms: number, floors: number, currency: Currenc
       floor,
       type,
       baseRate: rate,
+      maxGuests: isFamily ? 4 : isSuiteOrDeluxe ? 3 : 2,
+      singleBeds: isFamily ? 2 : type === 'Standard' && i % 2 === 1 ? 2 : 0,
+      doubleBeds: isFamily ? 1 : type === 'Standard' && i % 2 === 1 ? 0 : 1,
+      amenities: isSuiteOrDeluxe
+        ? ['Douche', 'Baignoire', 'Coffre-fort', 'Climatisation', 'Balcon', 'Wi-Fi']
+        : ['Douche', 'Coffre-fort', 'Climatisation', 'Wi-Fi'],
       status: i === 3 ? 'dirty' : i === 7 ? 'out_of_order' : 'available',
       assignedHousekeeper: i % 2 === 0 ? 'Amina K.' : 'Clarisse D.',
     });
@@ -100,6 +108,13 @@ export function createCotonouProject(id = 'proj-cotonou-1'): HotelProject {
         { id: 'rp-high', name: 'Haute Saison', multiplier: 1.25, description: 'Période de forte demande' },
       ],
       activeChannels: ['Direct', 'Téléphone', 'OTA', 'Agence', 'Entreprise'],
+      customAmenities: ['Douche', 'Baignoire', 'Salle de bain privée', 'Coffre-fort', 'Climatisation', 'Wi-Fi', 'Balcon', 'Vue mer', 'TV Smart', 'Bureau'],
+      packages: [
+        { id: 'pkg-bf', name: 'Formule Petit-Déjeuner Buffet', category: 'breakfast', price: 8500, pricingUnit: 'per_person_per_night', description: 'Buffet chaud & froid, jus frais', active: true },
+        { id: 'pkg-spa', name: 'Accès Spa & Bien-être', category: 'spa', price: 25000, pricingUnit: 'per_stay', description: 'Accès sauna, hammam et piscine', active: true },
+        { id: 'pkg-hp', name: 'Formule Demi-Pension', category: 'dining', price: 22000, pricingUnit: 'per_person_per_night', description: 'Petit-déjeuner + dîner 3 plats', active: true },
+        { id: 'pkg-airport', name: 'Navette Aéroport VIP', category: 'transport', price: 15000, pricingUnit: 'per_stay', description: 'Transfert privé aller-retour', active: true },
+      ],
     },
     rooms,
     guests: [

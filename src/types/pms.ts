@@ -52,6 +52,24 @@ export interface RatePlan {
   description: string;
 }
 
+export interface ServicePackage {
+  id: string;
+  name: string;
+  category: 'breakfast' | 'spa' | 'dining' | 'transport' | 'custom';
+  price: number;
+  pricingUnit: 'per_night' | 'per_person_per_night' | 'per_stay';
+  description: string;
+  active: boolean;
+}
+
+export interface RoomTypeConfig {
+  type: RoomType;
+  maxGuests: number;
+  singleBeds: number;
+  doubleBeds: number;
+  defaultRate: number;
+}
+
 export interface HotelConfig {
   hotelName: string;
   categoryStars: number;
@@ -64,6 +82,9 @@ export interface HotelConfig {
   billing: BillingConfig;
   ratePlans: RatePlan[];
   activeChannels: SalesChannel[];
+  roomTypesConfig?: RoomTypeConfig[];
+  packages?: ServicePackage[];
+  customAmenities?: string[];
 }
 
 export interface Room {
@@ -72,6 +93,10 @@ export interface Room {
   floor: number;
   type: RoomType;
   baseRate: number;
+  maxGuests?: number;
+  singleBeds?: number;
+  doubleBeds?: number;
+  amenities?: string[];
   status: RoomStatus;
   assignedHousekeeper?: string;
   guestOptedOutHousekeeping?: boolean;

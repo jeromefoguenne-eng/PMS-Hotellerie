@@ -25,6 +25,7 @@ import {
   Cloud,
 } from 'lucide-react';
 import type {
+  CatalogItem,
   FolioCategory,
   Guest,
   HotelConfig,
@@ -36,6 +37,7 @@ import type {
   ProjectActionLog,
   ProjectCollaborator,
   Reservation,
+  Room,
   RoomStatus,
   TelemetryEvent,
 } from './types/pms';
@@ -865,6 +867,21 @@ export function App() {
                 projects={currentMember.projects}
                 lang={lang}
                 onUpdateConfig={handleUpdateConfig}
+                onUpdateRooms={(rooms: Room[]) =>
+                  updateActiveProject((p) => ({
+                    ...p,
+                    rooms,
+                    config: { ...p.config, totalRooms: rooms.length },
+                    actionLog: logAction(p, 'config', 'Mise à jour des chambres & équipements', `${rooms.length} chambres configurées`),
+                  }))
+                }
+                onUpdateCatalog={(catalog: CatalogItem[]) =>
+                  updateActiveProject((p) => ({
+                    ...p,
+                    catalog,
+                    actionLog: logAction(p, 'config', 'Mise à jour carte Bar / Room Service', `${catalog.length} articles`),
+                  }))
+                }
                 onSwitchProject={handleSwitchProject}
                 onCreateConfiguredProject={handleCreateConfiguredProject}
                 onDuplicateProject={handleDuplicateProject}

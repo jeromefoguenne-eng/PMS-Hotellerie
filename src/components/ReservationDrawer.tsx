@@ -248,6 +248,35 @@ export const ReservationDrawer: React.FC<ReservationDrawerProps> = ({
                 </table>
               </div>
 
+              {/* Quick Add Configured Packages (Petit-déj, Spa, Formules) */}
+              {(project.config.packages || []).filter((p) => p.active).length > 0 && (
+                <div className="p-3 rounded-xl bg-indigo-50/70 border border-indigo-200 space-y-2">
+                  <div className="text-xs font-bold text-indigo-900">Formules & Packages configurés</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(project.config.packages || [])
+                      .filter((p) => p.active)
+                      .map((pkg) => (
+                        <button
+                          key={pkg.id}
+                          type="button"
+                          onClick={() =>
+                            onAddFolioItem(res.id, {
+                              description: pkg.name,
+                              category: pkg.category === 'spa' ? 'spa' : pkg.category === 'breakfast' || pkg.category === 'dining' ? 'restaurant' : 'extra',
+                              quantity: 1,
+                              unitPrice: pkg.price,
+                              payer: 'guest',
+                            })
+                          }
+                          className="px-2.5 py-1 rounded-lg bg-white hover:bg-indigo-600 hover:text-white border border-indigo-200 text-[11px] font-semibold text-indigo-800 transition"
+                        >
+                          + {pkg.name} ({formatMoney(pkg.price, project.config.currency)})
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              )}
+
               {/* Add Extra / Credit */}
               <div className="p-3.5 rounded-xl bg-slate-50 border space-y-2">
                 <div className="text-xs font-bold text-slate-700 flex items-center gap-1.5">

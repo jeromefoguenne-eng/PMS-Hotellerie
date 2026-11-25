@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Sliders, FolderKanban, Plus, Copy, Download, Upload, RotateCcw, Check, Sparkles } from 'lucide-react';
-import type { CurrencyCode, HotelConfig, HotelProject, Language, PaymentMethod } from '../types/pms';
+import type { CatalogItem, CurrencyCode, HotelConfig, HotelProject, Language, PaymentMethod, Room, ServicePackage } from '../types/pms';
 import { downloadJSON } from '../lib/format';
+import { PropertyCatalogEditor } from './PropertyCatalogEditor';
 
 interface ConfiguratorProjectsViewProps {
   mode: 'configurator' | 'projects';
@@ -9,6 +10,8 @@ interface ConfiguratorProjectsViewProps {
   projects: HotelProject[];
   lang: Language;
   onUpdateConfig: (newConfig: HotelConfig) => void;
+  onUpdateRooms: (rooms: Room[]) => void;
+  onUpdateCatalog: (catalog: CatalogItem[]) => void;
   onSwitchProject: (projectId: string) => void;
   onCreateConfiguredProject: (config: HotelConfig) => void;
   onDuplicateProject: (projectId: string) => void;
@@ -22,6 +25,8 @@ export const ConfiguratorProjectsView: React.FC<ConfiguratorProjectsViewProps> =
   projects,
   lang,
   onUpdateConfig,
+  onUpdateRooms,
+  onUpdateCatalog,
   onSwitchProject,
   onCreateConfiguredProject,
   onDuplicateProject,
@@ -530,6 +535,28 @@ export const ConfiguratorProjectsView: React.FC<ConfiguratorProjectsViewProps> =
           </div>
         </div>
       </div>
+
+      {/* Granular Editor: Rooms (Numbers, Beds, Amenities), Bar/Room Service Menu, Custom Packages */}
+      <PropertyCatalogEditor
+        currency={cfg.currency}
+        rooms={project.rooms}
+        catalog={project.catalog}
+        packages={cfg.packages || []}
+        amenitiesList={cfg.customAmenities || []}
+        onUpdateRooms={onUpdateRooms}
+        onUpdateCatalog={onUpdateCatalog}
+        onUpdatePackages={(nextPkgs: ServicePackage[]) => {
+          const updated = { ...cfg, packages: nextPkgs };
+          setCfg(updated);
+          onUpdateConfig(updated);
+        }}
+        onAddCustomAmenity={(am: string) => {
+          const nextAm = Array.from(new Set([...(cfg.customAmenities || []), am]));
+          const updated = { ...cfg, customAmenities: nextAm };
+          setCfg(updated);
+          onUpdateConfig(updated);
+        }}
+      />
     </form>
   );
 };
