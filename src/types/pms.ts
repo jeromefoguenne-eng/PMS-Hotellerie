@@ -288,6 +288,16 @@ export interface TelemetryEvent {
   detail: string;
 }
 
+export interface SiteVisitEvent {
+  id: string;
+  timestamp: string;
+  memberId?: string;
+  memberName?: string;
+  device: 'desktop' | 'tablet' | 'mobile';
+  language: Language;
+  tab: string;
+}
+
 export interface MemberAccount {
   id: string;
   email: string;

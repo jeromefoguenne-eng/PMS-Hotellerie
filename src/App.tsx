@@ -43,7 +43,9 @@ import type {
   Reservation,
   Room,
   RoomStatus,
+  SiteVisitEvent,
   TelemetryEvent,
+  UserRole,
 } from './types/pms';
 import { translations } from './i18n/translations';
 import {
@@ -51,7 +53,9 @@ import {
   loadCloudConfig,
   loadCurrentMemberId,
   loadMembers,
+  loadSiteVisits,
   loadTelemetry,
+  recordSiteVisit,
   saveCurrentMemberId,
   saveMembers,
   saveTelemetry,
@@ -79,6 +83,7 @@ export function App() {
   const [lang, setLang] = useState<Language>('fr');
   const [members, setMembers] = useState<MemberAccount[]>(() => loadMembers());
   const [telemetry, setTelemetry] = useState<TelemetryEvent[]>(() => loadTelemetry());
+  const [siteVisits, setSiteVisits] = useState<SiteVisitEvent[]>(() => loadSiteVisits());
   const [currentMemberId, setCurrentMemberId] = useState<string | null>(() => loadCurrentMemberId());
   const [activeTab, setActiveTab] = useState<string>('dashboard');
   const [selectedResId, setSelectedResId] = useState<string | null>(null);
@@ -205,6 +210,7 @@ export function App() {
   const handleLogin = (member: MemberAccount) => {
     setCurrentMemberId(member.id);
     setActiveTab('dashboard');
+    setSiteVisits(recordSiteVisit({ memberId: member.id, memberName: member.name, language: lang, tab: 'dashboard' }));
   };
 
   const handleRegister = (data: {
@@ -1062,8 +1068,10 @@ export function App() {
             {activeTab === 'admin' && currentMember.role === 'admin' && (
               <AdminSpaceView
                 lang={lang}
+                currentAdminId={currentMember.id}
                 members={members}
                 telemetry={telemetry}
+                siteVisits={siteVisits}
                 onToggleMemberStatus={(memberId) =>
                   setMembers((prev) =>
                     prev.map((m) =>
@@ -1072,6 +1080,14 @@ export function App() {
                         : m
                     )
                   )
+                }
+                onChangeMemberRole={(memberId, role: UserRole) =>
+                  setMembers((prev) =>
+                    prev.map((m) => (m.id === memberId ? { ...m, role } : m))
+                  )
+                }
+                onDeleteMember={(memberId) =>
+                  setMembers((prev) => prev.filter((m) => m.id !== memberId))
                 }
               />
             )}

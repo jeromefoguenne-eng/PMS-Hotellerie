@@ -1,24 +1,42 @@
 import React, { useMemo, useState } from 'react';
-import { ShieldAlert, Users, Activity, Download, Database, CheckCircle2, Ban } from 'lucide-react';
-import type { Language, MemberAccount, TelemetryEvent } from '../types/pms';
+import {
+  ShieldAlert,
+  Users,
+  Activity,
+  Download,
+  Database,
+  CheckCircle2,
+  Ban,
+  Trash2,
+  Eye,
+} from 'lucide-react';
+import type { Language, MemberAccount, SiteVisitEvent, TelemetryEvent, UserRole } from '../types/pms';
 import { downloadCSV, downloadJSON } from '../lib/format';
 import { loadCloudConfig, saveCloudConfig } from '../lib/storage';
 import { SUPABASE_SQL_SCHEMA } from '../lib/supabaseSync';
-import { computeAdminAnalytics, type TimeGranularity } from '../lib/analytics';
+import { computeAdminAnalytics, formatPeriodLabel, getPeriodKey, type TimeGranularity } from '../lib/analytics';
 import { OccupancyLineChart, SimpleBarChart } from './AnalyticsCharts';
 
 interface AdminSpaceViewProps {
   lang: Language;
+  currentAdminId: string;
   members: MemberAccount[];
   telemetry: TelemetryEvent[];
+  siteVisits: SiteVisitEvent[];
   onToggleMemberStatus: (memberId: string) => void;
+  onChangeMemberRole: (memberId: string, role: UserRole) => void;
+  onDeleteMember: (memberId: string) => void;
 }
 
 export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
   lang,
+  currentAdminId,
   members,
   telemetry,
+  siteVisits,
   onToggleMemberStatus,
+  onChangeMemberRole,
+  onDeleteMember,
 }) => {
   const [cloudCfg, setCloudCfg] = useState(loadCloudConfig());
   const [cloudSaved, setCloudSaved] = useState(false);
@@ -29,6 +47,33 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
     () => computeAdminAnalytics(members, telemetry, granularity, filterMemberId),
     [members, telemetry, granularity, filterMemberId]
   );
+
+  const visitsSeries = useMemo(() => {
+    const filtered =
+      filterMemberId === 'ALL'
+        ? siteVisits
+        : siteVisits.filter((v) => v.memberId === filterMemberId);
+    const map = new Map<string, number>();
+    filtered.forEach((v) => {
+      const k = getPeriodKey(v.timestamp.slice(0, 10), granularity);
+      map.set(k, (map.get(k) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, count]) => ({
+        label: formatPeriodLabel(k, granularity),
+        value: count,
+        tooltip: `${count} visite(s)`,
+      }));
+  }, [siteVisits, granularity, filterMemberId]);
+
+  const deviceStats = useMemo(() => {
+    const counts = { desktop: 0, tablet: 0, mobile: 0 };
+    siteVisits.forEach((v) => {
+      counts[v.device] = (counts[v.device] || 0) + 1;
+    });
+    return counts;
+  }, [siteVisits]);
 
   const totalRoomsBooked = analytics.totals.reservationsCount;
   const totalItemsSold = analytics.totals.itemsSold;
@@ -48,28 +93,75 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
     });
   }, [members]);
 
-  const exportStatsCSV = () => {
+  const exportFullStatsCSV = () => {
     const rows: (string | number)[][] = [
-      ['Membre', 'Organisation', 'Rôle', 'Statut', 'Charte Acceptée', 'Projets', 'Chambres Réservées', 'Articles Vendus', 'CA Généré'],
+      [
+        'Membre',
+        'E-mail',
+        'Organisation',
+        'Rôle',
+        'Statut',
+        'Charte Acceptée',
+        'Projets',
+        'Chambres Totales',
+        'Réservations',
+        'Articles Vendus',
+        'CA Généré',
+        'Visites Site',
+      ],
     ];
     members.forEach((m) => {
+      const mProjectsRes = m.projects.reduce((s, p) => s + p.reservations.length, 0);
+      const mRooms = m.projects.reduce((s, p) => s + p.rooms.length, 0);
       const mEvents = telemetry.filter((t) => t.memberId === m.id);
-      const rooms = mEvents.reduce((s, e) => s + e.roomsDelta, 0);
       const items = mEvents.reduce((s, e) => s + e.itemsDelta, 0);
       const rev = mEvents.reduce((s, e) => s + e.revenueDelta, 0);
+      const visits = siteVisits.filter((v) => v.memberId === m.id).length;
       rows.push([
         m.name,
+        m.email,
         m.organization,
         m.role,
         m.status,
         m.charterAccepted ? 'Oui' : 'Non',
         m.projects.length,
-        rooms,
+        mRooms,
+        mProjectsRes,
         items,
         rev,
+        visits,
       ]);
     });
-    downloadCSV(`openpms-admin-stats-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    downloadCSV(`openhotelpms-export-complet-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  };
+
+  const exportCommercialJSON = () => {
+    downloadJSON(`openhotelpms-dataset-complet-${new Date().toISOString().slice(0, 10)}.json`, {
+      exportedAt: new Date().toISOString(),
+      globalSummary: {
+        totalMembers: members.length,
+        totalProjects: members.reduce((s, m) => s + m.projects.length, 0),
+        totalReservations: totalRoomsBooked,
+        averageOccupancyRate: analytics.totals.occupancyRate,
+        totalRevenue: totalRevenueAll,
+        totalItemsSold,
+        totalSiteVisits: siteVisits.length,
+        devicesBreakdown: deviceStats,
+      },
+      membersStats: members.map((m) => ({
+        id: m.id,
+        name: m.name,
+        organization: m.organization,
+        role: m.role,
+        status: m.status,
+        charterAccepted: m.charterAccepted,
+        projectsCount: m.projects.length,
+        reservationsCount: m.projects.reduce((s, p) => s + p.reservations.length, 0),
+        visitsCount: siteVisits.filter((v) => v.memberId === m.id).length,
+      })),
+      telemetry,
+      siteVisits,
+    });
   };
 
   return (
@@ -78,10 +170,10 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-indigo-600" />
-            {lang === 'fr' ? 'Espace Administrateur — Statistiques Globales & Membres' : 'Admin Space — Global Analytics & Members'}
+            {lang === 'fr' ? 'Espace Administrateur — Statistiques, Visites & Gestion Comptes' : 'Admin Space — Analytics, Visits & Accounts'}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Visualisez les réservations par date, le taux de remplissage par jour/mois/an, le CA et l’usage par membre.
+            Statistiques globales, visites du site, gestion des rôles Admin, suppression de comptes et exports exploitables (CSV / JSON).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -119,27 +211,37 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
           </div>
 
           <button
-            onClick={exportStatsCSV}
+            onClick={exportFullStatsCSV}
             className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5"
           >
-            <Download className="w-3.5 h-3.5" /> CSV
+            <Download className="w-3.5 h-3.5" /> Export Complet CSV
           </button>
           <button
-            onClick={() => downloadJSON('openpms-telemetry.json', telemetry)}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold"
+            onClick={exportCommercialJSON}
+            className="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5"
           >
-            JSON
+            <Download className="w-3.5 h-3.5" /> Dataset JSON
           </button>
         </div>
       </div>
 
-      {/* Global Aggregated KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Global Aggregated KPIs + Site Visits */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
+          <div className="text-xs text-slate-500 font-semibold flex items-center justify-between">
+            <span>Visites sur le site</span>
+            <Eye className="w-4 h-4 text-indigo-600" />
+          </div>
+          <div className="text-2xl font-bold text-slate-900 mt-1 tabular-nums">{siteVisits.length}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            PC: {deviceStats.desktop} • Tab: {deviceStats.tablet} • Mob: {deviceStats.mobile}
+          </div>
+        </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Membres inscrits</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{members.length}</div>
           <div className="text-[11px] text-slate-500 mt-0.5">
-            {members.reduce((s, m) => s + m.projects.length, 0)} projets hôteliers actifs
+            {members.reduce((s, m) => s + m.projects.length, 0)} projets hôteliers
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
@@ -166,6 +268,13 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
       {/* Visual Charts directly in Admin Space */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SimpleBarChart
+          title="Visites sur le site par période"
+          subtitle="Sessions enregistrées (PC, Tablettes, Smartphones)"
+          color="#0F766E"
+          data={visitsSeries}
+        />
+
+        <SimpleBarChart
           title="Nombre de réservations par date / période"
           subtitle="Activité de réservation consolidée"
           color="#131A7A"
@@ -187,21 +296,6 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
         />
 
         <SimpleBarChart
-          title="Chiffre d’affaires généré par période"
-          subtitle="Hébergement vs Extras / Bar / Room Service"
-          color="#2563EB"
-          secondaryColor="#F59E0B"
-          primaryLabel="Hébergement"
-          secondaryLabel="Extras"
-          data={analytics.series.map((p) => ({
-            label: p.label,
-            value: p.roomRevenue,
-            secondaryValue: p.extrasRevenue,
-            tooltip: p.totalRevenue.toLocaleString('fr-FR'),
-          }))}
-        />
-
-        <SimpleBarChart
           title="Comparatif des réservations par Membre"
           subtitle="Volume de réservations par compte inscrit"
           color="#0D9488"
@@ -209,12 +303,12 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
         />
       </div>
 
-      {/* Members Table */}
+      {/* Members Management Table (Roles, Suspend, Delete) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="px-5 py-3.5 border-b flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-4 h-4 text-indigo-600" />
-            Liste des Membres & Statistiques d’utilisation
+            Gestion des Membres, Droits Admin & Statistiques
           </h3>
         </div>
         <div className="overflow-x-auto">
@@ -222,20 +316,20 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
             <thead className="bg-slate-50 text-slate-500 border-b">
               <tr>
                 <th className="text-left p-3.5">Membre / Établissement</th>
+                <th className="text-left p-3.5">Rôle</th>
                 <th className="text-left p-3.5">Charte</th>
                 <th className="text-center p-3.5">Projets</th>
-                <th className="text-right p-3.5">Chambres rés.</th>
-                <th className="text-right p-3.5">Articles vendus</th>
+                <th className="text-right p-3.5">Rés.</th>
                 <th className="text-right p-3.5">CA suivi</th>
-                <th className="text-right p-3.5">Action</th>
+                <th className="text-right p-3.5">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {members.map((m) => {
                 const mEvents = telemetry.filter((t) => t.memberId === m.id);
-                const rooms = mEvents.reduce((s, e) => s + e.roomsDelta, 0);
-                const items = mEvents.reduce((s, e) => s + e.itemsDelta, 0);
+                const mResCount = m.projects.reduce((s, p) => s + p.reservations.length, 0);
                 const rev = mEvents.reduce((s, e) => s + e.revenueDelta, 0);
+                const isSelf = m.id === currentAdminId;
                 return (
                   <tr key={m.id} className="hover:bg-slate-50">
                     <td className="p-3.5">
@@ -243,33 +337,59 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
                       <div className="text-slate-500">{m.email} • {m.organization}</div>
                     </td>
                     <td className="p-3.5">
+                      <select
+                        disabled={isSelf}
+                        value={m.role}
+                        onChange={(e) => onChangeMemberRole(m.id, e.target.value as UserRole)}
+                        className="px-2 py-1 rounded border border-slate-300 bg-white font-semibold text-xs disabled:opacity-60"
+                      >
+                        <option value="member">Membre</option>
+                        <option value="teacher">Enseignant</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </td>
+                    <td className="p-3.5">
                       {m.charterAccepted ? (
                         <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 font-semibold inline-flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3" /> Acceptée
+                          <CheckCircle2 className="w-3 h-3" /> Oui
                         </span>
                       ) : (
                         <span className="text-red-600 font-semibold">Non</span>
                       )}
                     </td>
                     <td className="p-3.5 text-center font-semibold">{m.projects.length}</td>
-                    <td className="p-3.5 text-right tabular-nums font-semibold">{rooms}</td>
-                    <td className="p-3.5 text-right tabular-nums font-semibold">{items}</td>
+                    <td className="p-3.5 text-right tabular-nums font-semibold">{mResCount}</td>
                     <td className="p-3.5 text-right tabular-nums font-bold text-indigo-700">
                       {rev.toLocaleString('fr-FR')}
                     </td>
-                    <td className="p-3.5 text-right">
-                      {m.role !== 'admin' && (
-                        <button
-                          onClick={() => onToggleMemberStatus(m.id)}
-                          className={`px-2.5 py-1 rounded text-[11px] font-semibold inline-flex items-center gap-1 ${
-                            m.status === 'active'
-                              ? 'bg-red-50 text-red-700 hover:bg-red-100'
-                              : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          }`}
-                        >
-                          <Ban className="w-3 h-3" />
-                          {m.status === 'active' ? 'Suspendre' : 'Réactiver'}
-                        </button>
+                    <td className="p-3.5 text-right space-x-1.5 whitespace-nowrap">
+                      {!isSelf ? (
+                        <>
+                          <button
+                            onClick={() => onToggleMemberStatus(m.id)}
+                            className={`px-2.5 py-1 rounded text-[11px] font-semibold inline-flex items-center gap-1 ${
+                              m.status === 'active'
+                                ? 'bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            <Ban className="w-3 h-3" />
+                            {m.status === 'active' ? 'Suspendre' : 'Réactiver'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Supprimer définitivement le compte de ${m.name} ?`)) {
+                                onDeleteMember(m.id);
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded bg-red-50 hover:bg-red-100 text-red-700 text-[11px] font-semibold inline-flex items-center gap-1"
+                            title="Supprimer ce compte"
+                          >
+                            <Trash2 className="w-3 h-3" /> Supprimer
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">Vous (Admin)</span>
                       )}
                     </td>
                   </tr>
