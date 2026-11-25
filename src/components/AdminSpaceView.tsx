@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ShieldAlert, Users, Activity, Download, Database, CheckCircle2, Ban } from 'lucide-react';
 import type { Language, MemberAccount, TelemetryEvent } from '../types/pms';
 import { downloadCSV, downloadJSON } from '../lib/format';
 import { loadCloudConfig, saveCloudConfig } from '../lib/storage';
+import { computeAdminAnalytics, type TimeGranularity } from '../lib/analytics';
+import { OccupancyLineChart, SimpleBarChart } from './AnalyticsCharts';
 
 interface AdminSpaceViewProps {
   lang: Language;
@@ -19,12 +21,31 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
 }) => {
   const [cloudCfg, setCloudCfg] = useState(loadCloudConfig());
   const [cloudSaved, setCloudSaved] = useState(false);
+  const [granularity, setGranularity] = useState<TimeGranularity>('day');
+  const [filterMemberId, setFilterMemberId] = useState<string>('ALL');
 
-  const totalRoomsBooked = telemetry.reduce((s, t) => s + t.roomsDelta, 0);
-  const totalItemsSold = telemetry.reduce((s, t) => s + t.itemsDelta, 0);
-  const totalRevenueFCFA = telemetry
-    .filter((t) => t.currency === 'FCFA')
-    .reduce((s, t) => s + t.revenueDelta, 0);
+  const analytics = useMemo(
+    () => computeAdminAnalytics(members, telemetry, granularity, filterMemberId),
+    [members, telemetry, granularity, filterMemberId]
+  );
+
+  const totalRoomsBooked = analytics.totals.reservationsCount;
+  const totalItemsSold = analytics.totals.itemsSold;
+  const totalRevenueAll = analytics.totals.totalRevenue;
+
+  const memberComparisonData = useMemo(() => {
+    return members.map((m) => {
+      const mRes = m.projects.reduce(
+        (s, p) => s + p.reservations.filter((r) => r.status !== 'cancelled' && r.status !== 'no_show').length,
+        0
+      );
+      return {
+        label: m.name.split(' ')[0],
+        value: mRes,
+        tooltip: `${m.name}: ${mRes} rés.`,
+      };
+    });
+  }, [members]);
 
   const exportStatsCSV = () => {
     const rows: (string | number)[][] = [
@@ -52,52 +73,139 @@ export const AdminSpaceView: React.FC<AdminSpaceViewProps> = ({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div>
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <ShieldAlert className="w-5 h-5 text-indigo-600" />
-            {lang === 'fr' ? 'Espace Administrateur — Gestion des Membres & Télémétrie' : 'Admin Space — Members & Telemetry'}
+            {lang === 'fr' ? 'Espace Administrateur — Statistiques Globales & Membres' : 'Admin Space — Global Analytics & Members'}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Suivi centralisé des comptes inscrits, de la charte acceptée, des chambres réservées, du CA et des articles vendus.
+            Visualisez les réservations par date, le taux de remplissage par jour/mois/an, le CA et l’usage par membre.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            value={filterMemberId}
+            onChange={(e) => setFilterMemberId(e.target.value)}
+            className="px-3 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold bg-slate-50"
+          >
+            <option value="ALL">Tous les membres ({members.length})</option>
+            {members.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+
+          <div className="flex bg-slate-100 p-1 rounded-lg text-xs">
+            {(
+              [
+                { id: 'day', label: 'Jour' },
+                { id: 'week', label: 'Semaine' },
+                { id: 'month', label: 'Mois' },
+                { id: 'year', label: 'An' },
+                { id: 'total', label: 'Total' },
+              ] as { id: TimeGranularity; label: string }[]
+            ).map((g) => (
+              <button
+                key={g.id}
+                onClick={() => setGranularity(g.id)}
+                className={`px-2.5 py-1 rounded-md font-semibold transition ${
+                  granularity === g.id ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-600'
+                }`}
+              >
+                {g.label}
+              </button>
+            ))}
+          </div>
+
           <button
             onClick={exportStatsCSV}
-            className="px-3.5 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-xs font-semibold flex items-center gap-1.5"
           >
-            <Download className="w-4 h-4" /> Export CSV Membres
+            <Download className="w-3.5 h-3.5" /> CSV
           </button>
           <button
             onClick={() => downloadJSON('openpms-telemetry.json', telemetry)}
-            className="px-3.5 py-2 rounded-lg bg-slate-900 text-white text-xs font-semibold flex items-center gap-1.5"
+            className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-semibold"
           >
-            Export JSON Télémétrie
+            JSON
           </button>
         </div>
       </div>
 
       {/* Global Aggregated KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Membres inscrits</div>
           <div className="text-2xl font-bold text-slate-900 mt-1">{members.length}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            {members.reduce((s, m) => s + m.projects.length, 0)} projets hôteliers actifs
+          </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500 font-semibold">Chambres réservées (Global)</div>
-          <div className="text-2xl font-bold text-indigo-700 mt-1">{totalRoomsBooked}</div>
+          <div className="text-xs text-slate-500 font-semibold">Réservations (sélection)</div>
+          <div className="text-2xl font-bold text-indigo-700 mt-1 tabular-nums">{totalRoomsBooked}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">
+            Remplissage moyen : {analytics.totals.occupancyRate}%
+          </div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
           <div className="text-xs text-slate-500 font-semibold">Éléments vendus (Bar/RS)</div>
-          <div className="text-2xl font-bold text-emerald-700 mt-1">{totalItemsSold}</div>
+          <div className="text-2xl font-bold text-emerald-700 mt-1 tabular-nums">{totalItemsSold}</div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Consommations extras suivies</div>
         </div>
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-xs">
-          <div className="text-xs text-slate-500 font-semibold">CA Cumulé (FCFA)</div>
+          <div className="text-xs text-slate-500 font-semibold">CA Cumulé (Tous projets)</div>
           <div className="text-2xl font-bold text-amber-700 mt-1 tabular-nums">
-            {totalRevenueFCFA.toLocaleString('fr-FR')} FCFA
+            {totalRevenueAll.toLocaleString('fr-FR')}
           </div>
+          <div className="text-[11px] text-slate-500 mt-0.5">Hébergement + Extras</div>
         </div>
+      </div>
+
+      {/* Visual Charts directly in Admin Space */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SimpleBarChart
+          title="Nombre de réservations par date / période"
+          subtitle="Activité de réservation consolidée"
+          color="#4F46E5"
+          data={analytics.series.map((p) => ({
+            label: p.label,
+            value: p.reservationsCount,
+            tooltip: `${p.reservationsCount} rés.`,
+          }))}
+        />
+
+        <OccupancyLineChart
+          title="Taux de remplissage des hôtels (%)"
+          subtitle="Évolution par jour, semaine, mois ou année"
+          data={analytics.series.map((p) => ({
+            label: p.label,
+            rate: p.occupancyRate,
+            detail: `${p.occupiedRoomNights}/${p.capacityRoomNights}`,
+          }))}
+        />
+
+        <SimpleBarChart
+          title="Chiffre d’affaires généré par période"
+          subtitle="Hébergement vs Extras / Bar / Room Service"
+          color="#2563EB"
+          secondaryColor="#F59E0B"
+          primaryLabel="Hébergement"
+          secondaryLabel="Extras"
+          data={analytics.series.map((p) => ({
+            label: p.label,
+            value: p.roomRevenue,
+            secondaryValue: p.extrasRevenue,
+            tooltip: p.totalRevenue.toLocaleString('fr-FR'),
+          }))}
+        />
+
+        <SimpleBarChart
+          title="Comparatif des réservations par Membre"
+          subtitle="Volume de réservations par compte inscrit"
+          color="#0D9488"
+          data={memberComparisonData}
+        />
       </div>
 
       {/* Members Table */}

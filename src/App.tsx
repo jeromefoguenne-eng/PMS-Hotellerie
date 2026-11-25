@@ -53,6 +53,7 @@ import { HousekeepingInventoryView } from './components/HousekeepingInventoryVie
 import { ConfiguratorProjectsView } from './components/ConfiguratorProjectsView';
 import { PedagogyReportsView } from './components/PedagogyReportsView';
 import { AdminSpaceView } from './components/AdminSpaceView';
+import { MemberStatsView } from './components/MemberStatsView';
 
 export function App() {
   const [lang, setLang] = useState<Language>('fr');
@@ -508,6 +509,7 @@ export function App() {
       ? [{ id: 'inventory', label: t.inventory, icon: Package }]
       : []),
     { id: 'reports', label: t.reports, icon: BarChart3 },
+    { id: 'memberStats', label: t.memberStats, icon: BarChart3 },
     { id: 'configurator', label: t.configurator, icon: Sliders },
     { id: 'projects', label: t.projects, icon: FolderKanban },
     { id: 'pedagogy', label: t.pedagogy, icon: GraduationCap },
@@ -756,6 +758,13 @@ export function App() {
                 }));
               }}
               onNavigate={setActiveTab}
+            />
+          )}
+          {activeTab === 'memberStats' && (
+            <MemberStatsView
+              activeProject={activeProject}
+              allProjects={currentMember.projects}
+              lang={lang}
             />
           )}
           {activeTab === 'admin' && currentMember.role === 'admin' && (
