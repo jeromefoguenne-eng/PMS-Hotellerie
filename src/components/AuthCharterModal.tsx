@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ShieldCheck, UserPlus, LogIn, CheckCircle2, Lock } from 'lucide-react';
+import { ShieldCheck, UserPlus, LogIn, CheckCircle2 } from 'lucide-react';
 import type { Language, MemberAccount } from '../types/pms';
 import { OpenHotelPmsLogo } from './OpenHotelPmsLogo';
 import { hashPassword, validatePasswordStrength } from '../lib/security';
@@ -147,15 +147,6 @@ export const AuthCharterModal: React.FC<AuthCharterModalProps> = ({
                 <span>{lang === 'fr' ? '20 scénarios pédagogiques & mode Examen' : '20 learning scenarios & Exam mode'}</span>
               </div>
             </div>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-slate-800 text-xs text-slate-400 flex items-center gap-2">
-            <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>
-              {lang === 'fr'
-                ? 'Accès sécurisé — Mots de passe hachés (SHA-256) & protection anti-brute-force.'
-                : 'Secured access — Hashed passwords (SHA-256) & brute-force protection.'}
-            </span>
           </div>
         </div>
 
