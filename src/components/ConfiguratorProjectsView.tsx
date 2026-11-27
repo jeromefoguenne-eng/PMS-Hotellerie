@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sliders, FolderKanban, Plus, Copy, Download, Upload, RotateCcw, Check, Sparkles } from 'lucide-react';
+import { Sliders, FolderKanban, Plus, Copy, Download, Upload, RotateCcw, Check, Sparkles, Trash2 } from 'lucide-react';
 import type { CatalogItem, CurrencyCode, HotelConfig, HotelProject, Language, PaymentMethod, Room, ServicePackage } from '../types/pms';
 import { downloadJSON } from '../lib/format';
 import { parseSafeImportedProject } from '../lib/security';
@@ -16,6 +16,7 @@ interface ConfiguratorProjectsViewProps {
   onSwitchProject: (projectId: string) => void;
   onCreateConfiguredProject: (config: HotelConfig) => void;
   onDuplicateProject: (projectId: string) => void;
+  onDeleteProject: (projectId: string) => void;
   onImportProject: (proj: HotelProject) => void;
   onResetCurrentProject: () => void;
 }
@@ -31,6 +32,7 @@ export const ConfiguratorProjectsView: React.FC<ConfiguratorProjectsViewProps> =
   onSwitchProject,
   onCreateConfiguredProject,
   onDuplicateProject,
+  onDeleteProject,
   onImportProject,
   onResetCurrentProject,
 }) => {
@@ -191,6 +193,18 @@ export const ConfiguratorProjectsView: React.FC<ConfiguratorProjectsViewProps> =
                   >
                     <Download className="w-3.5 h-3.5" /> Exporter JSON
                   </button>
+                  {projects.length > 1 && (
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Supprimer définitivement le projet "${p.name}" ?`)) {
+                          onDeleteProject(p.id);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-semibold flex items-center gap-1"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" /> Supprimer
+                    </button>
+                  )}
                 </div>
               </div>
             );

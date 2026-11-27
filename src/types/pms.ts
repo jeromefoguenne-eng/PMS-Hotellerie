@@ -238,6 +238,7 @@ export interface ProjectCollaborator {
   email: string;
   name: string;
   role: 'manager' | 'reception' | 'housekeeping' | 'accounting';
+  permissions?: string[];
   addedAt: string;
 }
 
@@ -310,6 +311,7 @@ export interface MemberAccount {
   lastActiveAt: string;
   charterAccepted: boolean;
   charterAcceptedAt?: string;
+  hasSeenOnboarding?: boolean;
   activeProjectId: string;
   projects: HotelProject[];
 }

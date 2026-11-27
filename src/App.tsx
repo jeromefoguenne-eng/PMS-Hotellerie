@@ -27,6 +27,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Smartphone,
+  HelpCircle,
 } from 'lucide-react';
 import type {
   CatalogItem,
@@ -75,9 +76,10 @@ import { ConfiguratorProjectsView } from './components/ConfiguratorProjectsView'
 import { PedagogyReportsView } from './components/PedagogyReportsView';
 import { AdminSpaceView } from './components/AdminSpaceView';
 import { MemberStatsView } from './components/MemberStatsView';
-import { AuditLogTeamView } from './components/AuditLogTeamView';
+import { AuditLogTeamView, ROLE_DEFAULT_PERMISSIONS } from './components/AuditLogTeamView';
 import { GuestCrmView } from './components/GuestCrmView';
 import { GuestPortalModal } from './components/GuestPortalModal';
+import { WelcomeOnboardingModal } from './components/WelcomeOnboardingModal';
 
 export function App() {
   const [lang, setLang] = useState<Language>('fr');
@@ -91,6 +93,7 @@ export function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showGuestPortal, setShowGuestPortal] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [lastSavedTime, setLastSavedTime] = useState<string>(() =>
     new Date().toTimeString().slice(0, 8)
@@ -140,16 +143,40 @@ export function App() {
     saveCurrentMemberId(currentMemberId);
   }, [currentMemberId]);
 
-  // Support multi-employee login: either primary member email OR collaborator email on a project
-  const currentMember =
-    members.find((m) => m.id === currentMemberId) ||
-    members.find((m) => m.projects.some((p) => p.collaborators?.some((c) => c.email === currentMemberId))) ||
-    null;
+  // Projects owned by currentMember + projects shared with currentMember's email as collaborator
+  const currentMember = members.find((m) => m.id === currentMemberId) || null;
+  const sharedProjectsFromOthers = currentMember
+    ? members
+        .filter((m) => m.id !== currentMember.id)
+        .flatMap((m) =>
+          m.projects.filter((p) =>
+            p.collaborators?.some((c) => c.email.toLowerCase() === currentMember.email.toLowerCase())
+          )
+        )
+    : [];
+  const accessibleProjects = currentMember
+    ? [...currentMember.projects, ...sharedProjectsFromOthers]
+    : [];
 
   const activeProject =
-    currentMember?.projects.find((p) => p.id === currentMember.activeProjectId) ||
-    currentMember?.projects[0] ||
+    accessibleProjects.find((p) => p.id === currentMember?.activeProjectId) ||
+    accessibleProjects[0] ||
     null;
+
+  const isProjectOwner = Boolean(
+    currentMember && activeProject && currentMember.projects.some((p) => p.id === activeProject.id)
+  );
+
+  const collaboratorEntry =
+    !isProjectOwner && currentMember && activeProject
+      ? activeProject.collaborators?.find(
+          (c) => c.email.toLowerCase() === currentMember.email.toLowerCase()
+        )
+      : undefined;
+
+  const allowedFeatures: string[] | null = collaboratorEntry
+    ? collaboratorEntry.permissions || ROLE_DEFAULT_PERMISSIONS[collaboratorEntry.role]
+    : null;
 
   const logAction = (
     proj: HotelProject,
@@ -174,10 +201,11 @@ export function App() {
     if (!currentMember || !activeProject) return;
     setMembers((prev) =>
       prev.map((m) => {
-        if (m.id !== currentMember.id) return m;
+        const ownsProj = m.projects.some((p) => p.id === activeProject.id);
+        if (!ownsProj) return m;
         return {
           ...m,
-          lastActiveAt: new Date().toISOString(),
+          lastActiveAt: m.id === currentMember.id ? new Date().toISOString() : m.lastActiveAt,
           projects: m.projects.map((p) =>
             p.id === activeProject.id ? { ...updater(p), updatedAt: new Date().toISOString() } : p
           ),
@@ -210,6 +238,9 @@ export function App() {
   const handleLogin = (member: MemberAccount) => {
     setCurrentMemberId(member.id);
     setActiveTab('dashboard');
+    if (!member.hasSeenOnboarding) {
+      setShowOnboarding(true);
+    }
     setSiteVisits(recordSiteVisit({ memberId: member.id, memberName: member.name, language: lang, tab: 'dashboard' }));
   };
 
@@ -240,6 +271,7 @@ export function App() {
     };
     setMembers((prev) => [...prev, newMember]);
     setCurrentMemberId(newMember.id);
+    setShowOnboarding(true);
     const updated = appendTelemetry({
       memberId: newMember.id,
       memberName: newMember.name,
@@ -615,6 +647,22 @@ export function App() {
     );
   };
 
+  const handleDeleteProject = (projectId: string) => {
+    if (!currentMember) return;
+    setMembers((prev) =>
+      prev.map((m) => {
+        if (m.id !== currentMember.id) return m;
+        const remaining = m.projects.filter((p) => p.id !== projectId);
+        if (remaining.length === 0) return m;
+        return {
+          ...m,
+          projects: remaining,
+          activeProjectId: m.activeProjectId === projectId ? remaining[0].id : m.activeProjectId,
+        };
+      })
+    );
+  };
+
   const handleResetCurrentProject = () => {
     const fresh = createCotonouProject(activeProject.id);
     fresh.name = activeProject.name;
@@ -639,7 +687,7 @@ export function App() {
 
   const activeScenario = PEDAGOGICAL_SCENARIOS.find((s) => s.id === activeProject.pedagogy.activeScenarioId);
 
-  const navGroups: { title: string; items: { id: string; label: string; icon: typeof LayoutDashboard }[] }[] = [
+  const rawNavGroups: { title: string; items: { id: string; label: string; icon: typeof LayoutDashboard }[] }[] = [
     {
       title: 'Opérations',
       items: [
@@ -685,6 +733,15 @@ export function App() {
     },
   ];
 
+  const navGroups = rawNavGroups
+    .map((grp) => ({
+      ...grp,
+      items: allowedFeatures
+        ? grp.items.filter((item) => allowedFeatures.includes(item.id))
+        : grp.items,
+    }))
+    .filter((grp) => grp.items.length > 0);
+
   const searchMatches = searchQuery.trim()
     ? activeProject.reservations.filter((r) => {
         const g = activeProject.guests.find((x) => x.id === r.guestId);
@@ -715,14 +772,14 @@ export function App() {
 
           <div className="hidden sm:block h-5 w-px bg-slate-200 mx-1" />
 
-          {/* Property Switcher directly in Top Bar */}
+          {/* Property Switcher directly in Top Bar (own + shared projects) */}
           <select
             value={activeProject.id}
             onChange={(e) => handleSwitchProject(e.target.value)}
             className="hidden sm:block max-w-[200px] px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200/70 text-xs font-semibold text-slate-800 border border-transparent focus:border-indigo-500 focus:outline-none truncate"
             title="Changer d'hôtel / projet"
           >
-            {currentMember.projects.map((p) => (
+            {accessibleProjects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.config.hotelName} ({p.config.currency})
               </option>
@@ -815,6 +872,14 @@ export function App() {
             className="px-2 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 font-bold flex items-center gap-1"
           >
             <Globe className="w-3.5 h-3.5" /> {lang.toUpperCase()}
+          </button>
+
+          <button
+            onClick={() => setShowOnboarding(true)}
+            className="p-1.5 rounded-lg border border-slate-200 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600"
+            title="Guide d'utilisation OpenHotelPMS"
+          >
+            <HelpCircle className="w-4 h-4" />
           </button>
 
           <button
@@ -1005,6 +1070,7 @@ export function App() {
                 onSwitchProject={handleSwitchProject}
                 onCreateConfiguredProject={handleCreateConfiguredProject}
                 onDuplicateProject={handleDuplicateProject}
+                onDeleteProject={handleDeleteProject}
                 onImportProject={handleImportProject}
                 onResetCurrentProject={handleResetCurrentProject}
               />
@@ -1061,7 +1127,17 @@ export function App() {
               <AuditLogTeamView
                 project={activeProject}
                 lang={lang}
+                isOwner={isProjectOwner}
                 onAddCollaborator={handleAddCollaborator}
+                onUpdateCollaboratorPermissions={(email, permissions) =>
+                  updateActiveProject((p) => ({
+                    ...p,
+                    collaborators: (p.collaborators || []).map((c) =>
+                      c.email.toLowerCase() === email.toLowerCase() ? { ...c, permissions } : c
+                    ),
+                    actionLog: logAction(p, 'team', 'Modification accès employé', `${email} (${permissions.length} modules)`),
+                  }))
+                }
                 onRemoveCollaborator={handleRemoveCollaborator}
               />
             )}
@@ -1120,6 +1196,22 @@ export function App() {
           );
         })}
       </nav>
+
+      {/* First-Login Welcome Onboarding Guide */}
+      {showOnboarding && (
+        <WelcomeOnboardingModal
+          memberName={currentMember.name}
+          onClose={() => {
+            setShowOnboarding(false);
+            setMembers((prev) =>
+              prev.map((m) =>
+                m.id === currentMember.id ? { ...m, hasSeenOnboarding: true } : m
+              )
+            );
+          }}
+          onGoToProjects={() => setActiveTab('projects')}
+        />
+      )}
 
       {/* Mews Guest Portal / Online Check-in Simulator */}
       {showGuestPortal && (

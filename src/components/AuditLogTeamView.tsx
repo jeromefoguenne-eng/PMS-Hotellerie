@@ -1,19 +1,44 @@
 import React, { useState } from 'react';
-import { History, Users, UserPlus, Download, Search, Trash2 } from 'lucide-react';
+import { History, Users, UserPlus, Download, Search, Trash2, ShieldCheck } from 'lucide-react';
 import type { HotelProject, Language, ProjectCollaborator } from '../types/pms';
 import { downloadCSV } from '../lib/format';
+
+export const FEATURE_PERMISSIONS: { id: string; label: string }[] = [
+  { id: 'dashboard', label: 'Tableau de bord' },
+  { id: 'planning', label: 'Timeline (Planning)' },
+  { id: 'frontDesk', label: 'Réception (Arrivées/Départs)' },
+  { id: 'crm', label: 'CRM Clients' },
+  { id: 'housekeeping', label: 'Gouvernante & Maintenance' },
+  { id: 'billing', label: 'Facturation & Caisse' },
+  { id: 'inventory', label: 'POS & Stocks' },
+  { id: 'memberStats', label: 'Statistiques' },
+  { id: 'reports', label: 'Rapports & KPI' },
+  { id: 'configurator', label: 'Paramétrage Hôtel' },
+  { id: 'auditLog', label: 'Historique Actions' },
+];
+
+export const ROLE_DEFAULT_PERMISSIONS: Record<ProjectCollaborator['role'], string[]> = {
+  reception: ['dashboard', 'planning', 'frontDesk', 'crm', 'billing', 'inventory'],
+  housekeeping: ['dashboard', 'housekeeping'],
+  accounting: ['dashboard', 'billing', 'reports', 'memberStats', 'auditLog'],
+  manager: FEATURE_PERMISSIONS.map((f) => f.id),
+};
 
 interface AuditLogTeamViewProps {
   project: HotelProject;
   lang: Language;
+  isOwner: boolean;
   onAddCollaborator: (collab: Omit<ProjectCollaborator, 'addedAt'>) => void;
+  onUpdateCollaboratorPermissions: (email: string, permissions: string[]) => void;
   onRemoveCollaborator: (email: string) => void;
 }
 
 export const AuditLogTeamView: React.FC<AuditLogTeamViewProps> = ({
   project,
   lang,
+  isOwner,
   onAddCollaborator,
+  onUpdateCollaboratorPermissions,
   onRemoveCollaborator,
 }) => {
   const [filterActor, setFilterActor] = useState('ALL');
@@ -23,6 +48,7 @@ export const AuditLogTeamView: React.FC<AuditLogTeamViewProps> = ({
   const [cName, setCName] = useState('');
   const [cEmail, setCEmail] = useState('');
   const [cRole, setCRole] = useState<ProjectCollaborator['role']>('reception');
+  const [cPerms, setCPerms] = useState<string[]>(ROLE_DEFAULT_PERMISSIONS.reception);
 
   const logs = project.actionLog || [];
   const collaborators = project.collaborators || [];
@@ -101,7 +127,7 @@ export const AuditLogTeamView: React.FC<AuditLogTeamViewProps> = ({
 
       {/* Audit Log Table */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
-        <div className="overflow-x-auto max-h-96">
+        <div className="overflow-x-auto max-h-80">
           <table className="w-full text-xs">
             <thead className="bg-slate-50 text-slate-500 border-b sticky top-0">
               <tr>
@@ -143,80 +169,160 @@ export const AuditLogTeamView: React.FC<AuditLogTeamViewProps> = ({
         </div>
       </div>
 
-      {/* Multi-Employee / Shared Project Access */}
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4">
+      {/* Multi-Employee / Shared Project Access + Feature Permissions */}
+      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-4 text-xs">
         <div>
           <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <Users className="w-4 h-4 text-indigo-600" />
-            Équipe & Accès partagé sur cet hôtel ({collaborators.length})
+            Partage du Projet & Gestion des Accès Employés ({collaborators.length})
           </h3>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Ajoutez vos réceptionnistes, gouvernantes ou comptables pour qu’ils accèdent au même projet depuis leur PC, tablette ou smartphone (synchronisation activée avec Supabase Cloud).
+          <p className="text-slate-500 mt-0.5">
+            Ajoutez vos employés par leur e-mail d’inscription et cochez uniquement les fonctionnalités auxquelles ils ont droit.
           </p>
         </div>
 
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!cName.trim() || !cEmail.trim()) return;
-            onAddCollaborator({ name: cName.trim(), email: cEmail.trim(), role: cRole });
-            setCName('');
-            setCEmail('');
-          }}
-          className="flex flex-wrap gap-2 items-center"
-        >
-          <input
-            value={cName}
-            onChange={(e) => setCName(e.target.value)}
-            placeholder="Nom de l'employé"
-            className="px-3 py-2 border rounded-lg text-xs flex-1 min-w-[160px]"
-          />
-          <input
-            type="email"
-            value={cEmail}
-            onChange={(e) => setCEmail(e.target.value)}
-            placeholder="E-mail de connexion"
-            className="px-3 py-2 border rounded-lg text-xs flex-1 min-w-[180px]"
-          />
-          <select
-            value={cRole}
-            onChange={(e) => setCRole(e.target.value as ProjectCollaborator['role'])}
-            className="px-3 py-2 border rounded-lg text-xs bg-white"
+        {isOwner && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!cName.trim() || !cEmail.trim()) return;
+              onAddCollaborator({
+                name: cName.trim(),
+                email: cEmail.trim().toLowerCase(),
+                role: cRole,
+                permissions: cPerms,
+              });
+              setCName('');
+              setCEmail('');
+            }}
+            className="p-4 rounded-xl bg-slate-50 border space-y-3"
           >
-            <option value="reception">Réception</option>
-            <option value="housekeeping">Gouvernante</option>
-            <option value="accounting">Comptabilité</option>
-            <option value="manager">Manager</option>
-          </select>
-          <button
-            type="submit"
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold flex items-center gap-1.5"
-          >
-            <UserPlus className="w-3.5 h-3.5" /> Ajouter l'employé
-          </button>
-        </form>
+            <div className="flex flex-wrap gap-2 items-center">
+              <input
+                required
+                value={cName}
+                onChange={(e) => setCName(e.target.value)}
+                placeholder="Nom de l'employé"
+                className="px-3 py-2 border rounded-lg bg-white flex-1 min-w-[150px]"
+              />
+              <input
+                required
+                type="email"
+                value={cEmail}
+                onChange={(e) => setCEmail(e.target.value)}
+                placeholder="E-mail du compte employé"
+                className="px-3 py-2 border rounded-lg bg-white flex-1 min-w-[180px]"
+              />
+              <select
+                value={cRole}
+                onChange={(e) => {
+                  const r = e.target.value as ProjectCollaborator['role'];
+                  setCRole(r);
+                  setCPerms(ROLE_DEFAULT_PERMISSIONS[r]);
+                }}
+                className="px-3 py-2 border rounded-lg bg-white font-semibold"
+              >
+                <option value="reception">Réception</option>
+                <option value="housekeeping">Gouvernante</option>
+                <option value="accounting">Comptabilité</option>
+                <option value="manager">Manager (Tout)</option>
+              </select>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold flex items-center gap-1.5"
+              >
+                <UserPlus className="w-3.5 h-3.5" /> Partager le projet
+              </button>
+            </div>
 
-        <div className="divide-y divide-slate-100 text-xs">
-          {collaborators.map((c) => (
-            <div key={c.email} className="py-2.5 flex items-center justify-between">
-              <div>
-                <span className="font-bold text-slate-900">{c.name}</span>
-                <span className="text-slate-500 ml-2">{c.email}</span>
+            <div>
+              <div className="font-semibold text-slate-700 mb-1.5 flex items-center gap-1">
+                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+                Fonctionnalités autorisées pour cet employé :
               </div>
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold uppercase text-[10px]">
-                  {c.role}
-                </span>
-                <button
-                  onClick={() => onRemoveCollaborator(c.email)}
-                  className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
-                  title="Retirer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+              <div className="flex flex-wrap gap-2">
+                {FEATURE_PERMISSIONS.map((fp) => {
+                  const checked = cPerms.includes(fp.id);
+                  return (
+                    <label
+                      key={fp.id}
+                      className={`px-2.5 py-1 rounded-lg border cursor-pointer flex items-center gap-1.5 ${
+                        checked ? 'bg-indigo-50 border-indigo-300 text-indigo-800 font-semibold' : 'bg-white border-slate-200 text-slate-600'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) =>
+                          setCPerms(
+                            e.target.checked ? [...cPerms, fp.id] : cPerms.filter((x) => x !== fp.id)
+                          )
+                        }
+                      />
+                      {fp.label}
+                    </label>
+                  );
+                })}
               </div>
             </div>
-          ))}
+          </form>
+        )}
+
+        <div className="divide-y divide-slate-100 space-y-2">
+          {collaborators.map((c) => {
+            const perms = c.permissions || ROLE_DEFAULT_PERMISSIONS[c.role] || [];
+            return (
+              <div key={c.email} className="pt-3 first:pt-0 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-slate-900">{c.name}</span>
+                    <span className="text-slate-500 ml-2">{c.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold uppercase text-[10px]">
+                      {c.role}
+                    </span>
+                    {isOwner && (
+                      <button
+                        onClick={() => onRemoveCollaborator(c.email)}
+                        className="p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
+                        title="Retirer l'accès"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {isOwner && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {FEATURE_PERMISSIONS.map((fp) => {
+                      const has = perms.includes(fp.id);
+                      return (
+                        <button
+                          key={fp.id}
+                          type="button"
+                          onClick={() =>
+                            onUpdateCollaboratorPermissions(
+                              c.email,
+                              has ? perms.filter((x) => x !== fp.id) : [...perms, fp.id]
+                            )
+                          }
+                          className={`px-2 py-0.5 rounded text-[10px] border transition ${
+                            has
+                              ? 'bg-emerald-50 border-emerald-300 text-emerald-800 font-semibold'
+                              : 'bg-slate-50 border-slate-200 text-slate-400'
+                          }`}
+                        >
+                          {has ? '✓ ' : '+ '}
+                          {fp.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
